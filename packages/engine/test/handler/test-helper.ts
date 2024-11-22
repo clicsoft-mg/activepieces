@@ -1,6 +1,6 @@
-import { Action, ActionErrorHandlingOptions, ActionType, BranchAction, BranchCondition, BranchExecutionType, CodeAction, FlowVersionState, LoopOnItemsAction, PackageType, PieceAction, PieceType, ProgressUpdateType, RouterExecutionType } from '@activepieces/shared'
+import { Action, ActionErrorHandlingOptions, ActionType, BranchCondition, BranchExecutionType, CodeAction, FlowVersionState, LoopOnItemsAction, PackageType, PieceAction, PieceType, ProgressUpdateType, RouterExecutionType } from '@activepieces/shared'
 import { EngineConstants } from '../../src/lib/handler/context/engine-constants'
-import { VariableService } from '../../src/lib/variables/variable-service'
+import { createPropsResolver } from '../../src/lib/variables/props-resolver'
 
 export const generateMockEngineConstants = (params?: Partial<EngineConstants>): EngineConstants => {
     return new EngineConstants(
@@ -9,7 +9,7 @@ export const generateMockEngineConstants = (params?: Partial<EngineConstants>): 
         params?.flowVersionState ?? FlowVersionState.DRAFT,
         params?.flowRunId ?? 'flowRunId',
         params?.publicUrl ?? 'http://127.0.0.1:3000',
-        params?.internalApiUrl ??  'http://127.0.0.1:3000',
+        params?.internalApiUrl ??  'http://127.0.0.1:3000/',
         params?.retryConstants ?? {
             maxAttempts: 2,
             retryExponential: 1,
@@ -17,7 +17,7 @@ export const generateMockEngineConstants = (params?: Partial<EngineConstants>): 
         },
         params?.engineToken ?? 'engineToken',
         params?.projectId ?? 'projectId',
-        params?.variableService ?? new VariableService({
+        params?.propsResolver ?? createPropsResolver({
             projectId: 'projectId',
             engineToken: 'engineToken',
             apiUrl: 'http://127.0.0.1:3000',
@@ -78,24 +78,6 @@ export function buildRouterWithOneCondition({ children, conditions, executionTyp
         valid: true,
     }
 }
-
-export function buildActionWithOneCondition({ condition, onSuccessAction, onFailureAction }: { condition: BranchCondition, onSuccessAction?: Action, onFailureAction?: Action }): BranchAction {
-    return {
-        name: 'branch',
-        displayName: 'Your Branch Name',
-        type: ActionType.BRANCH,
-        settings: {
-            inputUiInfo: {},
-            conditions: [
-                [condition],
-            ],
-        },
-        onFailureAction,
-        onSuccessAction,
-        valid: true,
-    }
-}
-
 
 export function buildCodeAction({ name, input, nextAction, errorHandlingOptions }: { name: 'echo_step' | 'runtime' | 'echo_step_1', input: Record<string, unknown>, errorHandlingOptions?: ActionErrorHandlingOptions, nextAction?: Action }): CodeAction {
     return {
