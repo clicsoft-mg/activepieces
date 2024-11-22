@@ -22,7 +22,7 @@ async function handleFileChange(piecePackageName: string, io: Server): Promise<v
         lock = await memoryLock.acquire(PIECES_BUILDER_MUTEX_KEY)
 
         logger.info(chalk.blue.bold('🤌 Building pieces... 🤌'))
-        if (!/^[a-z0-9-]+$/.test(piecePackageName)) {
+        if (!/^[A-Za-z0-9-]+$/.test(piecePackageName)) {
             throw new Error(`Piece package name contains invalid character: ${piecePackageName}`)
         }
         const cmd = `npx nx run-many -t build --projects=${piecePackageName}`

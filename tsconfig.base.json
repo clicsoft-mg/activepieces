@@ -233,6 +233,9 @@
       "@activepieces/piece-ghostcms": [
         "packages/pieces/community/ghostcms/src/index.ts"
       ],
+      "@activepieces/piece-gimmy-C": [
+        "packages/pieces/community/gimmy-C/src/index.ts"
+      ],
       "@activepieces/piece-github": [
         "packages/pieces/community/github/src/index.ts"
       ],
