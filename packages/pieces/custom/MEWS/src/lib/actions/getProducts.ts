@@ -185,11 +185,10 @@ export const getProducts = createAction({
     }
 
     const products = responses?.['products']?.body?.Products;
-    console.log('products', products.length);
+    console.log('products', products.length, products[0]);
     const productsRes: any = [];
     const acIds = new Set<string>();
     products.forEach((itm: Product) => {
-      console.log('product', itm);
       const keys = Object.keys(itm.Names);
       const obj = {
         productCode: itm.Id,
@@ -197,6 +196,13 @@ export const getProducts = createAction({
         productShortLabel: itm.ShortNames[keys[0]],
         accountingCategory: itm.AccountingCategoryId,
         serviceId: itm.ServiceId,
+        price: itm.Price.GrossValue,
+        tax:{
+          taxCode: itm.Price.TaxValues[0]?.Code || '',
+          taxValue: itm.Price.TaxValues[0]?.Value
+        },
+        isActive: itm.IsActive,
+        chargingMode: itm.ChargingMode
       };
       if (itm.AccountingCategoryId) acIds.add(itm.AccountingCategoryId);
       productsRes.push(obj);
@@ -219,6 +225,7 @@ export const getProducts = createAction({
       );
     }
     const acObj: any = {};
+    console.log('accountingCategories',responses['accountingCategories'].body.AccountingCategories[0])
     responses['accountingCategories'].body.AccountingCategories.forEach(
       (itm: AccountingCategories) => {
         Object.assign(acObj, {
@@ -231,15 +238,15 @@ export const getProducts = createAction({
       }
     );
 
-    productsRes.forEach((itm: Product) =>
+    productsRes.forEach((itm: any) =>
       Object.assign(itm, {
-        accountingCategory: itm.AccountingCategoryId
-          ? acObj?.[itm.AccountingCategoryId]
+        accountingCategory: itm.accountingCategory
+          ? acObj?.[itm.accountingCategory]
           : {},
       })
     );
 
     console.log('success', productsRes[0]);
-    return { products: productsRes };
+    return { products: productsRes};
   },
 });

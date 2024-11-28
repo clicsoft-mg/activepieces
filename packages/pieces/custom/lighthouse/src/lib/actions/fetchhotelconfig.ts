@@ -11,16 +11,13 @@ import {
   DynamicPropsValue,
   Property,
 } from '@activepieces/pieces-framework';
-import { assertNotNullOrUndefined } from '@activepieces/shared';
-import FormData from 'form-data';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-import axios from 'axios';
+import { decode } from '../common/commonFunctions';
 
 export const fetchhotelconfig = createAction({
   // auth: check https://www.activepieces.com/docs/developers/piece-reference/authentication,
   name: 'fetchhotelconfig',
-  displayName: 'fetchhotelconfig',
-  description: '',
+  displayName: 'Hotel Config',
+  description: 'Fetches Hotels\' Config',
 
   props: {
     headers: Property.Object({
@@ -89,14 +86,26 @@ export const fetchhotelconfig = createAction({
       if (!body) {
         return;
       }
-      const data = body['data'];
-      let url = 'https://api.mylighthouse.com/v3/hotels';
+      console.log(body);
+      const reqBody = body?.['data']?.['body'];
+  
+      if (!reqBody) {
+        throw new Error('Missing required data');
+      }
+      console.log('reqBody', reqBody);
+      const decodedObject = await decode(reqBody.data);
+      if(!decodedObject.url || !decodedObject.headers || !decodedObject.queryParams){
+        throw new Error('Invalid request');
+      }
 
       const request: HttpRequest = {
         method: 'GET' as HttpMethod,
-        url,
-        headers: data.headers as HttpHeaders,
-        queryParams: data.queryParams as QueryParams,
+        url:`${decodedObject.url}/hotels`,
+        headers: decodedObject.headers as HttpHeaders,
+        queryParams: {
+          page: "1",
+          par_page: "100",
+        } as QueryParams,
         timeout: 0,
       };
       return await httpClient.sendRequest(request);

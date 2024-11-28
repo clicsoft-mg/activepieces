@@ -104,6 +104,7 @@ export type Product = {
     Currency: string;
     TaxValues: {
       Code: string;
+      Value: number
     }[];
   };
   ExternalIdentifier: string;
