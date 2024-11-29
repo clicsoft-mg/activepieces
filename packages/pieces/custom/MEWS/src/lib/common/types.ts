@@ -7,14 +7,30 @@ export type MewsRequest = {
     client: string; // 'Clicsoft'
   };
   url: string;
+  body?: MewsBody;
 };
 
 export type MewsBody = {
-  serviceIds?: string[];
-  rateIds?: string[];
-  productIds?: string[];
-  accountingCategoryIds?: string[];
+  serviceIds?: string[]; // Array of service IDs
+  rateIds?: string[]; // Array of rate IDs
+  productIds?: string[]; // Array of product IDs
+  accountingCategoryIds?: string[]; // Array of accounting category IDs
+  startDate?: string; // ISO date string
+  endDate?: string; // ISO date string
 };
+
+export type ResourceBlock = {
+  AssignedResourceId: string;
+  CreatedUtc: string; // ISO date format
+  EndUtc: string; // ISO date format
+  Id: string;
+  IsActive: boolean;
+  StartUtc: string; // ISO date format
+  Type: string; // Could be a union type if predefined values exist (e.g., "InternalUse")
+  UpdatedUtc: string; // ISO date format
+  Name: string;
+  Notes: string;
+}
 
 export type Service = {
   Id: string;
