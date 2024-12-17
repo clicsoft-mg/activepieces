@@ -11,13 +11,13 @@ import {
   DynamicPropsValue,
   Property,
 } from '@activepieces/pieces-framework';
-import { decode } from '../common/commonFunctions';
+import { decode } from '../common/common';
 
-export const fetchcompetitorrates = createAction({
+export const fetchhotelconfig = createAction({
   // auth: check https://www.activepieces.com/docs/developers/piece-reference/authentication,
-  name: 'fetchcompetitorrates',
-  displayName: 'Fetch Competitor Rates',
-  description: "Fetches Hotels's Competitors' Rates",
+  name: 'fetchhotelconfig',
+  displayName: 'Hotel Config',
+  description: 'Fetches Hotels\' Config',
 
   props: {
     headers: Property.Object({
@@ -108,20 +108,9 @@ export const fetchcompetitorrates = createAction({
         } as QueryParams,
         timeout: 0,
       };
-
-      const ratesRequest: HttpRequest = {
-        method: 'GET' as HttpMethod,
-        url:`${decodedObject.url}/rates`,
-        headers: decodedObject.headers as HttpHeaders,
-        queryParams: decodedObject.queryParams as QueryParams,
-        timeout: 0,
-      };
-      const[rates,hotelConfig] = await Promise.all([httpClient.sendRequest(request),httpClient.sendRequest(ratesRequest)]);
-      console.log(rates);
-      console.log(hotelConfig);
-      return {...rates.body,...hotelConfig.body};
+      return await httpClient.sendRequest(request);
     } catch (error) {
-      console.error('Error running fetch competitor rates action:', error);
+      console.error('Error running fetchdata action:', error);
       throw error;
     }
   },

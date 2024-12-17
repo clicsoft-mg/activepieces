@@ -3,8 +3,8 @@ import {
   PieceAuth,
   Property,
 } from '@activepieces/pieces-framework';
-import { dataupdate } from './lib/actions/dataupdate';
-import { gimmibookings } from './lib/actions/gimmibookings';
+import { dataupdate } from './lib/actions/data-update';
+import { gimmibookings } from './lib/actions/gimmi-bookings';
 import { authAction } from './lib/actions/auth-action';
 
 export const gimmyAuth = PieceAuth.CustomAuth({

@@ -18,7 +18,7 @@ import {
   Resources,
   Service,
 } from '../common/types';
-import { decode } from '../common/commonFunctions';
+import { decode } from '../common/common';
 
 export const getResources = createAction({
   name: 'getResources',
@@ -114,10 +114,10 @@ export const getResources = createAction({
     const { accessToken, clientToken, client } = creds;
     const origin = data.url;
     const endpoints = {
-      resourceCategoryAssignments: `${origin}api/connector/v1/resourceCategoryAssignments/getAll`,
-      services: `${origin}api/connector/v1/services/getAll`,
-      resourceCategories: `${origin}api/connector/v1/resourceCategories/getAll`,
-      resources: `${origin}api/connector/v1/resources/getAll`,
+      resourceCategoryAssignments: `${origin}/api/connector/v1/resourceCategoryAssignments/getAll`,
+      services: `${origin}/api/connector/v1/services/getAll`,
+      resourceCategories: `${origin}/api/connector/v1/resourceCategories/getAll`,
+      resources: `${origin}/api/connector/v1/resources/getAll`,
     };
     const createHttpPostRequest = (
       url: string,

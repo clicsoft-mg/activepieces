@@ -551,14 +551,14 @@ export const catchMewsWebhook = createAction({
     } catch (error) {
       return { error };
     }
-    console.log(resArr); 
+    console.log(resArr);
     return {
       data: resArr,
-      success: "false1"
+      success: 'false1',
     };
     // } catch (error) {
     //   console.error('Error running fetch competitor rates action:', error);
-    //   return { error, data }; 
+    //   return { error, data };
     // }
   },
 });

@@ -8,13 +8,19 @@ import {
   DynamicPropsValue,
   Property,
 } from '@activepieces/pieces-framework';
-import { MewsBody, MewsRequest, Rates, Service } from '../common/types';
-import { decode } from '../common/commonFunctions';
+import {
+  AccountingCategories,
+  MewsBody,
+  MewsRequest,
+  Product,
+  Service,
+} from '../common/types';
+import { decode } from '../common/common';
 
-export const getRates = createAction({
-  name: 'getRates',
-  displayName: 'Fetch Rates',
-  description: 'Fetch Rates',
+export const getProducts = createAction({
+  name: 'getProducts',
+  displayName: 'Fetch Products',
+  description: 'Fetch Products',
 
   props: {
     headers: Property.Object({
@@ -90,7 +96,7 @@ export const getRates = createAction({
     }
     console.log('reqBody', reqBody);
     const decodedObject = await decode(reqBody.data);
-    const mewsBody:MewsBody = reqBody.body
+    const mewsBody: MewsBody = reqBody.body;
     console.log(decodedObject, JSON.stringify(decodedObject));
     const data: MewsRequest = decodedObject;
     const creds = data?.['credentials'];
@@ -105,8 +111,9 @@ export const getRates = createAction({
     const { accessToken, clientToken, client } = creds;
     const origin = data.url;
     const endpoints = {
-      services: `${origin}api/connector/v1/services/getAll`,
-      rates: `${origin}api/connector/v1/rates/getAll`,
+      services: `${origin}/api/connector/v1/services/getAll`,
+      products: `${origin}/api/connector/v1/products/getAll`,
+      accountingCategories: `${origin}/api/connector/v1/accountingCategories/getAll`,
     };
     const createHttpPostRequest = (
       url: string,
@@ -128,11 +135,15 @@ export const getRates = createAction({
     });
     const requests = {
       services: createHttpPostRequest(endpoints.services),
-      rates: createHttpPostRequest(endpoints.rates),
+      products: createHttpPostRequest(endpoints.products),
+      accountingCategories: createHttpPostRequest(
+        endpoints.accountingCategories
+      ),
     };
     const responses: any = {};
     const serviceObj: any = {};
-    const serviceIds: string[] = [];
+    let serviceIds: string[] = [];
+    const serviceSet = new Set<string>();
     if (mewsBody?.serviceIds && mewsBody?.serviceIds.length > 0) {
       requests.services.body.ServiceIds = mewsBody?.serviceIds;
     }
@@ -148,44 +159,93 @@ export const getRates = createAction({
     }
     responses?.['services']?.body?.Services.forEach((item: Service) => {
       if (item.IsActive) {
-        serviceIds.push(item.Id);
+        serviceSet.add(item.Id);
         Object.assign(serviceObj, {
           [item.Id]: item.Name,
         });
       }
     });
+    serviceIds = Array.from(serviceSet);
+    console.log('serviceIds', serviceIds.length);
 
     try {
-      requests.rates.body.ServiceIds = serviceIds;
-      if (mewsBody?.rateIds && mewsBody?.rateIds.length > 0) {
-        requests.rates.body.RateIds = mewsBody?.rateIds;
+      if (mewsBody?.productIds && mewsBody?.productIds.length > 0) {
+        requests.products.body.ProductIds = mewsBody?.productIds;
       }
-      responses['rates'] = await httpClient.sendRequest<{
-        Rates: Rates[];
-      }>(requests.rates);
-      if (!responses?.['rates']?.body?.Rates) {
-        throw new Error(`rates data not found`);
+      requests.products.body.ServiceIds = serviceIds;
+      responses['products'] = await httpClient.sendRequest<{
+        Products: Product[];
+      }>(requests.products);
+      if (!responses?.['products']?.body?.Products) {
+        throw new Error(`products data not found`);
       }
     } catch (error) {
-      throw new Error(`Failed to fetch rates ${JSON.stringify(error)}`);
+      throw new Error(`Failed to fetch products ${JSON.stringify(error)}`);
     }
 
-    const rates = responses?.['rates']?.body?.Rates;
-    const ratesRes: any = [];
-    rates.forEach((itm: Rates) => {
+    const products = responses?.['products']?.body?.Products;
+    console.log('products', products.length, products[0]);
+    const productsRes: any = [];
+    const acIds = new Set<string>();
+    products.forEach((itm: Product) => {
+      const keys = Object.keys(itm.Names);
       const obj = {
-        rateCode: itm.Id,
-        rateLabel: itm.Name,
-        rateShortLabel: itm.ShortName,
-        priceType: serviceObj[itm.ServiceId],
+        productCode: itm.Id,
+        productLabel: itm.Names[keys[0]],
+        productShortLabel: itm.ShortNames[keys[0]],
+        accountingCategory: itm.AccountingCategoryId,
+        serviceId: itm.ServiceId,
+        price: itm.Price.GrossValue,
+        tax:{
+          taxCode: itm.Price.TaxValues[0]?.Code || '',
+          taxValue: itm.Price.TaxValues[0]?.Value
+        },
         isActive: itm.IsActive,
-        isEnabled: itm.IsEnabled,
-        isPublic: itm.IsPublic,
+        chargingMode: itm.ChargingMode
       };
-      ratesRes.push(obj);
+      if (itm.AccountingCategoryId) acIds.add(itm.AccountingCategoryId);
+      productsRes.push(obj);
     });
 
-    console.log('success');
-    return ratesRes;
+    try {
+      if (Array.from(acIds).length > 0) {
+        requests.accountingCategories.body.AccountingCategoryIds =
+          Array.from(acIds);
+      }
+      responses['accountingCategories'] = await httpClient.sendRequest<{
+        AccountingCategories: AccountingCategories[];
+      }>(requests.accountingCategories);
+      if (!responses?.['accountingCategories']?.body?.AccountingCategories) {
+        throw new Error(`accountingCategories data not found`);
+      }
+    } catch (error) {
+      throw new Error(
+        `Failed to fetch accountingCategories ${JSON.stringify(error)}`
+      );
+    }
+    const acObj: any = {};
+    console.log('accountingCategories',responses['accountingCategories'].body.AccountingCategories[0])
+    responses['accountingCategories'].body.AccountingCategories.forEach(
+      (itm: AccountingCategories) => {
+        Object.assign(acObj, {
+          [itm.Id]: {
+            classification: itm.Classification,
+            name: itm.Name,
+            code: itm.Code,
+          },
+        });
+      }
+    );
+
+    productsRes.forEach((itm: any) =>
+      Object.assign(itm, {
+        accountingCategory: itm.accountingCategory
+          ? acObj?.[itm.accountingCategory]
+          : {},
+      })
+    );
+
+    console.log('success', productsRes[0]);
+    return { products: productsRes};
   },
 });

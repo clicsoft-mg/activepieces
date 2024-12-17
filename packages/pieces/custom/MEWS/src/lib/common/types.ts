@@ -8,6 +8,12 @@ export type MewsRequest = {
   };
   url: string;
   body?: MewsBody;
+  rateIds?: never[];
+  status?: string[];
+  resourceCategoryIds?: string[];
+  endUtc?: any;
+  startUtc?: any;
+  enterpriseIds?: any;
 };
 
 export type MewsBody = {
@@ -30,7 +36,46 @@ export type ResourceBlock = {
   UpdatedUtc: string; // ISO date format
   Name: string;
   Notes: string;
-}
+};
+
+export type MewsRequestAddContact = {
+  credentials: {
+    accessToken: string; // 'B811B453B8144A73B80CAD6E00805D62-B7899D9C0F3C579C86621146C4C74A2';
+    clientToken: string; // '9381AB282F844CD9A2F4AD200158E7BC-D27113FA792B0855F87D0F93E9E1D71';
+    client: string; // 'Clicsoft'
+  };
+  url: string;
+  name: string;
+  surname: string;
+  phone: string;
+  email: string;
+  address: {
+    address1: string,
+    address2: string,
+    address3: string,
+    address4: string,
+    city: string,
+    state: string;
+    zipCode: string,
+    country: string
+  };
+};
+
+export type MewsResponseAddContact = {
+  Id: string;
+  FirstName: string;
+  LastName: string;
+  Phone: string;
+  Email: string;
+  Address: {
+    CountryCode: string;
+    PostalCode: string;
+    State: string;
+    City: string;
+    Line2: string;
+    Line1: string;
+  };
+};
 
 export type Service = {
   Id: string;

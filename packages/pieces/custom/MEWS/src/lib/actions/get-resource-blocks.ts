@@ -16,7 +16,7 @@ import {
   ResourceCategoryAssignments,
   Service,
 } from '../common/types';
-import { decode } from '../common/commonFunctions';
+import { decode } from '../common/common';
 
 export const getResourceBlocks = createAction({
   name: 'getResourceBlocks',
@@ -103,7 +103,6 @@ export const getResourceBlocks = createAction({
     const decodedObject = await decode(reqBody.data);
     console.log(decodedObject, JSON.stringify(decodedObject));
     const data: MewsRequest = decodedObject;
-    const mewsBody: MewsBody = reqBody.body;
     const creds = data?.['credentials'];
     if (
       !data?.url ||
@@ -113,10 +112,10 @@ export const getResourceBlocks = createAction({
     ) {
       throw new Error('Missing required data');
     }
-    if(data?.body?.startDate){
+    if (data?.body?.startDate) {
       startDate = new Date(data?.body?.startDate);
     }
-    if(data?.body?.endDate){
+    if (data?.body?.endDate) {
       endDate = new Date(data.body.endDate);
     }
     endDate.setHours(0, 0, 0, 0);
@@ -124,11 +123,10 @@ export const getResourceBlocks = createAction({
     const { accessToken, clientToken, client } = creds;
     const origin = data.url;
     const endpoints = {
-      resourceCategoryAssignments: `${origin}api/connector/v1/resourceCategoryAssignments/getAll`,
-      services: `${origin}api/connector/v1/services/getAll`,
-      resourceCategories: `${origin}api/connector/v1/resourceCategories/getAll`,
-      resources: `${origin}api/connector/v1/resources/getAll`,
-      resourceBlocks: `${origin}api/connector/v1/resourceBlocks/getAll`,
+      resourceCategoryAssignments: `${origin}/api/connector/v1/resourceCategoryAssignments/getAll`,
+      services: `${origin}/api/connector/v1/services/getAll`,
+      resourceCategories: `${origin}/api/connector/v1/resourceCategories/getAll`,
+      resourceBlocks: `${origin}/api/connector/v1/resourceBlocks/getAll`,
     };
     const createHttpPostRequest = (
       url: string,
@@ -149,9 +147,6 @@ export const getResourceBlocks = createAction({
       },
     });
     const requests = {
-      resources: createHttpPostRequest(endpoints.resources, {
-        Extent: { Resources: true },
-      }),
       resourceCategoryAssignments: createHttpPostRequest(
         endpoints.resourceCategoryAssignments,
         {
@@ -162,6 +157,10 @@ export const getResourceBlocks = createAction({
       resourceCategories: createHttpPostRequest(endpoints.resourceCategories),
       resourceBlocks: createHttpPostRequest(endpoints.resourceBlocks, {
         Extent: { Inactive: false },
+        CollidingUtc: {
+          StartUtc: new Date(startDate),
+          EndUtc: new Date(endDate),
+        },
       }),
     };
     const responses: any = {};
@@ -180,7 +179,7 @@ export const getResourceBlocks = createAction({
     );
 
     try {
-      requests.resourceCategories.body.ServiceIds = serviceIds;
+      requests.resourceCategories.body.ServiceIds = serviceIds.slice(0, 999);
       responses['resourceCategories'] = await httpClient.sendRequest<{
         ResourceCategories: ResourceCategories[];
       }>(requests.resourceCategories);
@@ -188,7 +187,7 @@ export const getResourceBlocks = createAction({
         throw new Error(`resourceCategories data not found`);
       }
     } catch (error) {
-      throw new Error(`Failed to fetch services ${JSON.stringify(error)}`);
+      throw new Error(`Failed to fetch resourceCategories ${JSON.stringify(error)}`);
     }
 
     const resourcesCategoryIds = responses[
@@ -196,19 +195,6 @@ export const getResourceBlocks = createAction({
     ]?.body?.ResourceCategories.map(
       (resourceCategory: ResourceCategories) => resourceCategory.Id
     );
-
-    try {
-      responses['resourceBlocks'] = await httpClient.sendRequest<{
-        ResourceBlocks: ResourceBlock[];
-      }>(requests.resourceBlocks);
-      if (!responses?.['resourceBlocks']?.body?.ResourceBlocks) {
-        throw new Error(`ResourceBlocks data not found`);
-      }
-    } catch (error) {
-      throw new Error(
-        `Failed to fetch ResourceBlocks ${JSON.stringify(error)}`
-      );
-    }
 
     const resourceBlocks: any = [];
     async function fetchRes(cursor: string | null) {
@@ -263,19 +249,23 @@ export const getResourceBlocks = createAction({
       resourceBlocksArr.push({
         resourceId: itm.AssignedResourceId,
         name: itm.Name,
-        start: itm.StartUtc,
-        end: itm.EndUtc,
+        startDate: itm.StartUtc,
+        endDate: itm.EndUtc,
         type: itm.Type,
         description: itm.Notes,
-        categoryId: null,
+        categoryId: '',
       });
     });
+    const resourceCategoryAssignmentsIds = Array.from(resSet);
 
     try {
       requests.resourceCategoryAssignments.body.ResourceCategoryIds =
-        resourcesCategoryIds;
-      requests.resourceCategoryAssignments.body.ResourceCategoryAssignmentIds =
-        Array.from(resSet);
+        resourcesCategoryIds.slice(0, 999);
+
+      // if (resourceCategoryAssignmentsIds.length > 0) {
+      //   requests.resourceCategoryAssignments.body.ResourceCategoryAssignmentIds =
+      //     resourceCategoryAssignmentsIds.slice(0, 999);
+      // }
       responses['resourceCategoryAssignments'] = await httpClient.sendRequest<{
         ResourceCategoryAssignments: ResourceCategoryAssignments[];
       }>(requests.resourceCategoryAssignments);
@@ -292,17 +282,25 @@ export const getResourceBlocks = createAction({
     }
 
     const resourceCategoryAssignmentsObj: any = {};
-    responses[
-      'resourceCategoryAssignments'
-    ]?.body?.ResourceCategoryAssignments.forEach(
-      (itm: ResourceCategoryAssignments) => {
-        Object.assign(resourceCategoryAssignmentsObj, {
-          [itm.ResourceId]: itm.CategoryId,
-        });
-      }
+    const rca =
+      responses['resourceCategoryAssignments']?.body
+        ?.ResourceCategoryAssignments;
+    rca.forEach((itm: ResourceCategoryAssignments) => {
+      console.log('ResourceCategoryAssignments', itm);
+      Object.assign(resourceCategoryAssignmentsObj, {
+        [itm.ResourceId]: itm.CategoryId,
+      });
+    });
+    console.log(rca,
+      'resourceCategoryAssignmentsObj',
+      requests.resourceCategoryAssignments,
     );
     resourceBlocksArr.forEach((itm: any) => {
-      itm.categoryId = resourceCategoryAssignmentsObj[itm.resourceId];
+      console.log(
+        itm.resourceId,
+        resourceCategoryAssignmentsObj[itm.resourceId]
+      );
+      itm.categoryId = resourceCategoryAssignmentsObj[itm.resourceId] || '';
     });
     return resourceBlocksArr;
   },
