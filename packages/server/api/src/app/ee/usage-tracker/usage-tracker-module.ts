@@ -1,8 +1,8 @@
-import { AppSystemProp, system } from '@activepieces/server-shared'
+import { apVersionUtil } from '@activepieces/server-shared'
 import { Platform } from '@activepieces/shared'
 import { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox'
 import dayjs from 'dayjs'
-import { Between, Equal } from 'typeorm'
+import { Between, Equal, IsNull, Not } from 'typeorm'
 import { repoFactory } from '../../core/db/repo-factory'
 import { flagService } from '../../flags/flag.service'
 import { systemJobsSchedule } from '../../helper/system-jobs'
@@ -16,9 +16,9 @@ const userRepo = repoFactory(UserEntity)
 const projectRepo = repoFactory(ProjectEntity)
 const platformRepo = repoFactory(PlatformEntity)
 
-export const usageTrackerModule: FastifyPluginAsyncTypebox = async () => {
+export const usageTrackerModule: FastifyPluginAsyncTypebox = async (app) => {
     systemJobHandlers.registerJobHandler(SystemJobName.USAGE_REPORT, sendUsageReport)
-    await systemJobsSchedule.upsertJob({
+    await systemJobsSchedule(app.log).upsertJob({
         job: {
             name: SystemJobName.USAGE_REPORT,
             data: {},
@@ -33,7 +33,11 @@ export const usageTrackerModule: FastifyPluginAsyncTypebox = async () => {
 async function sendUsageReport(job: SystemJobData<SystemJobName.USAGE_REPORT>): Promise<void> {
     const startOfDay = dayjs(job.timestamp).startOf('day').toISOString()
     const endOfDay = dayjs(job.timestamp).endOf('day').toISOString()
-    const platforms = await platformRepo().find()
+    const platforms = await platformRepo().find({
+        where: {
+            licenseKey: Not(IsNull()),
+        },
+    })
     const reports = []
     for (const platform of platforms) {
         if (flagService.isCloudPlatform(platform.id)) {
@@ -52,8 +56,8 @@ async function sendUsageReport(job: SystemJobData<SystemJobName.USAGE_REPORT>): 
 }
 
 async function constructUsageReport(platform: Platform, startDate: string, endDate: string): Promise<UsageReport> {
-    const licenseKey = system.getOrThrow(AppSystemProp.LICENSE_KEY)
-    const version = await flagService.getCurrentRelease()
+    const licenseKey = platform.licenseKey
+    const version = await apVersionUtil.getCurrentRelease()
     const addedProjects = await getAddedProjects(platform.id, startDate, endDate)
     const addedUsers = await getAddedUsers(platform.id, startDate, endDate)
     const activeProjects = await projectRepo().countBy({
@@ -108,7 +112,7 @@ async function getAddedProjects(platformId: string, startDate: string, endDate: 
 type UsageReport = {
     timestamp: string
     version: string
-    licenseKey: string
+    licenseKey?: string
     platformId: string
     platformName: string
     activeUsers: number

@@ -1,4 +1,4 @@
-import { AppSystemProp, DatabaseType, system } from '@activepieces/server-shared'
+import { AppSystemProp } from '@activepieces/server-shared'
 import {
     Brackets,
     EntitySchema,
@@ -6,6 +6,7 @@ import {
     SelectQueryBuilder,
     WhereExpressionBuilder,
 } from 'typeorm'
+import { DatabaseType, system } from '../system/system'
 import { atob, btoa, decodeByType, encodeByType } from './pagination-utils'
 
 export enum Order {

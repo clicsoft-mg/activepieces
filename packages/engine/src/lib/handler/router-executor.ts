@@ -54,12 +54,19 @@ async function handleRouterExecution({ action, executionState, constants, censor
     const routerOutput = RouterStepOutput.init({
         input: censoredInput,
     }).setOutput({
-        branches: evaluatedConditions,
+        branches: resolvedInput.branches.map((branch, index) => ({
+            branchName: branch.branchName,
+            branchIndex: index + 1,
+            evaluation: evaluatedConditions[index],
+        })),
     })
     executionState = executionState.upsertStep(action.name, routerOutput)
 
     try {
         for (let i = 0; i < resolvedInput.branches.length; i++) {
+            if (constants.testSingleStepMode) {
+                break
+            }
             if (evaluatedConditions[i]) {
                 executionState = (await flowExecutor.execute({
                     action: action.children[i],

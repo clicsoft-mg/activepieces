@@ -4,6 +4,7 @@ import {
     ProjectMemberWithUser,
 } from '@activepieces/ee-shared'
 import {
+    ApEdition,
     ApId,
     apId,
     Cursor,
@@ -16,19 +17,22 @@ import {
     UserId,
 } from '@activepieces/shared'
 import dayjs from 'dayjs'
+import { FastifyBaseLogger } from 'fastify'
+import { Equal } from 'typeorm'
+import { userIdentityService } from '../../authentication/user-identity/user-identity-service'
 import { repoFactory } from '../../core/db/repo-factory'
 import { buildPaginator } from '../../helper/pagination/build-paginator'
 import { paginationHelper } from '../../helper/pagination/pagination-utils'
+import { system } from '../../helper/system/system'
 import { projectService } from '../../project/project-service'
 import { userService } from '../../user/user-service'
 import { projectRoleService } from '../project-role/project-role.service'
 import {
     ProjectMemberEntity,
 } from './project-member.entity'
-
 const repo = repoFactory(ProjectMemberEntity)
 
-export const projectMemberService = {
+export const projectMemberService = (log: FastifyBaseLogger) => ({
     async upsert({
         userId,
         projectId,
@@ -69,9 +73,13 @@ export const projectMemberService = {
         })
     },
     async list(
-        projectId: ProjectId,
-        cursorRequest: Cursor | null,
-        limit: number,
+        {
+            platformId,
+            projectId,
+            cursorRequest,
+            limit,
+            projectRoleId,
+        }: ListParams,
     ): Promise<SeekPage<ProjectMemberWithUser>> {
         const decodedCursor = paginationHelper.decodeCursor(cursorRequest)
         const paginator = buildPaginator({
@@ -85,11 +93,20 @@ export const projectMemberService = {
         })
         const queryBuilder = repo()
             .createQueryBuilder('project_member')
-            .where({ projectId })
+            .where({ platformId })
+
+        if (projectId) {
+            queryBuilder.andWhere({ projectId })
+        }
+
+        if (projectRoleId) {
+            queryBuilder.andWhere({ projectRoleId })
+        }
+
         const { data, cursor } = await paginator.paginate(queryBuilder)
         const enrichedData = await Promise.all(
             data.map(async (member) => {
-                const enrichedMember = await enrichProjectMemberWithUser(member)
+                const enrichedMember = await enrichProjectMemberWithUser(member, log)
                 return {
                     ...enrichedMember,
                     projectRole: await projectRoleService.getOneOrThrowById({
@@ -138,7 +155,7 @@ export const projectMemberService = {
             name: params.role,
             platformId: params.platformId,
         })
-        await repo().update({ 
+        await repo().update({
             id: params.id,
             projectId: params.projectId,
         }, {
@@ -149,6 +166,20 @@ export const projectMemberService = {
             projectId: params.projectId,
         })
     },
+    async getIdsOfProjects({
+        userId,
+        platformId,
+    }: GetIdsOfProjectsParams): Promise<string[]> {
+        const edition = system.getEdition()
+        if (edition === ApEdition.COMMUNITY) {
+            return []
+        }
+        const members = await repo().findBy({
+            userId,
+            platformId: Equal(platformId),
+        })
+        return members.map((member) => member.projectId)
+    },
     async delete(
         projectId: ProjectId,
         invitationId: ProjectMemberId,
@@ -158,6 +189,19 @@ export const projectMemberService = {
     async countTeamMembers(projectId: ProjectId): Promise<number> {
         return repo().countBy({ projectId })
     },
+})
+
+type ListParams = {
+    platformId: PlatformId
+    projectId?: ProjectId
+    cursorRequest: Cursor | null
+    limit: number
+    projectRoleId?: string
+}
+
+type GetIdsOfProjectsParams = {
+    userId: UserId
+    platformId: PlatformId
 }
 
 type UpsertParams = {
@@ -178,23 +222,34 @@ type UpdateMemberRole = {
 
 async function enrichProjectMemberWithUser(
     projectMember: ProjectMember,
+    log: FastifyBaseLogger,
 ): Promise<ProjectMemberWithUser> {
     const user = await userService.getOneOrFail({
         id: projectMember.userId,
     })
+    const identity = await userIdentityService(log).getBasicInformation(user.identityId)
     const projectRole = await projectRoleService.getOneOrThrowById({
         id: projectMember.projectRoleId,
     })
+    const project = await projectService.getOneOrThrow(projectMember.projectId)
     return {
         ...projectMember,
         projectRole,
+        project: {
+            id: project.id,
+            displayName: project.displayName,
+        },
         user: {
             platformId: user.platformId,
             platformRole: user.platformRole,
-            email: user.email,
+            status: user.status,
+            externalId: user.externalId,
+            email: identity.email,
             id: user.id,
-            firstName: user.firstName,
-            lastName: user.lastName,
+            firstName: identity.firstName,
+            lastName: identity.lastName,
+            created: user.created,
+            updated: user.updated,
         },
     }
 }

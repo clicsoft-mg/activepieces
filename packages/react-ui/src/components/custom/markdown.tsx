@@ -23,6 +23,7 @@ type MarkdownProps = {
   markdown: string | undefined;
   variables?: Record<string, string>;
   variant?: MarkdownVariant;
+  className?: string;
 };
 
 const Container = ({
@@ -55,13 +56,15 @@ const Container = ({
           )}
         </>
       )}
-      <AlertDescription>{children}</AlertDescription>
+      <AlertDescription className="flex-grow w-full">
+        {children}
+      </AlertDescription>
     </Alert>
   );
 };
 
 const ApMarkdown = React.memo(
-  ({ markdown, variables, variant }: MarkdownProps) => {
+  ({ markdown, variables, variant, className }: MarkdownProps) => {
     const [copiedText, setCopiedText] = useState<string | null>(null);
     const { toast } = useToast();
 
@@ -90,6 +93,7 @@ const ApMarkdown = React.memo(
     return (
       <Container variant={variant}>
         <ReactMarkdown
+          className={cn('flex-grow w-full ', className)}
           remarkPlugins={[gfm]}
           components={{
             code(props) {

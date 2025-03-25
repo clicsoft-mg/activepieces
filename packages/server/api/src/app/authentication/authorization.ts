@@ -1,7 +1,7 @@
-import { logger } from '@activepieces/server-shared'
 import {
     ActivepiecesError,
     ErrorCode,
+    isNil,
     isObject,
 } from '@activepieces/shared'
 import { preSerializationHookHandler } from 'fastify'
@@ -22,15 +22,14 @@ export function extractResourceName(url: string): string | undefined {
 export const entitiesMustBeOwnedByCurrentProject: preSerializationHookHandler<
 Payload | null
 > = (request, _response, payload, done) => {
-    logger.trace(
+    request.log.trace(
         { payload, principal: request.principal, route: request.routeConfig },
         'entitiesMustBeOwnedByCurrentProject',
     )
+    const principalProjectId = request.principal?.projectId
 
-    if (isObject(payload)) {
-        const principalProjectId = request.principal.projectId
+    if (isObject(payload) && !isNil(principalProjectId)) {
         let verdict: AuthzVerdict = 'ALLOW'
-
 
         if ('projectId' in payload) {
             if (payload.projectId !== principalProjectId) {

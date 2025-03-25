@@ -1,7 +1,10 @@
-import { AppSystemProp, ContainerType, DatabaseType, logger, PiecesSource, QueueMode, RedisType, SharedSystemProp, system, SystemProp, WorkerSystemProps } from '@activepieces/server-shared'
+import { AppSystemProp, ContainerType, PiecesSource, SystemProp, WorkerSystemProp } from '@activepieces/server-shared'
 import { ApEdition, ApEnvironment, ExecutionMode, FileLocation, isNil, PieceSyncMode } from '@activepieces/shared'
+import { FastifyBaseLogger } from 'fastify'
+import { s3Helper } from '../file/s3-helper'
 import { encryptUtils } from './encryption'
 import { jwtUtils } from './jwt-utils'
+import { DatabaseType, QueueMode, RedisType, system } from './system/system'
 
 
 function enumValidator<T extends string>(enumValues: T[]) {
@@ -39,41 +42,34 @@ function urlValidator(value: string) {
 const systemPropValidators: {
     [key in SystemProp]: (value: string) => true | string
 } = {
-    // SharedSystemProp
-    [SharedSystemProp.EXECUTION_MODE]: enumValidator(Object.values(ExecutionMode)),
-    [SharedSystemProp.LOG_LEVEL]: enumValidator(['error', 'warn', 'info', 'debug', 'trace']),
-    [SharedSystemProp.LOG_PRETTY]: booleanValidator,
-    [SharedSystemProp.ENVIRONMENT]: enumValidator(Object.values(ApEnvironment)),
-    [SharedSystemProp.TRIGGER_TIMEOUT_SECONDS]: numberValidator,
-    [SharedSystemProp.FLOW_TIMEOUT_SECONDS]: numberValidator,
-    [SharedSystemProp.PAUSED_FLOW_TIMEOUT_DAYS]: numberValidator,
-    [SharedSystemProp.APP_WEBHOOK_SECRETS]: stringValidator,
-    [SharedSystemProp.MAX_FILE_SIZE_MB]: numberValidator,
-    [SharedSystemProp.FRONTEND_URL]: urlValidator,
-    [SharedSystemProp.CACHE_PATH]: stringValidator,
-    [SharedSystemProp.PACKAGE_ARCHIVE_PATH]: stringValidator,
-    [SharedSystemProp.SANDBOX_MEMORY_LIMIT]: numberValidator,
-    [SharedSystemProp.SANDBOX_PROPAGATED_ENV_VARS]: stringValidator,
-    [SharedSystemProp.PIECES_SOURCE]: enumValidator(Object.values(PiecesSource)),
-    [SharedSystemProp.ENGINE_EXECUTABLE_PATH]: stringValidator,
-    [SharedSystemProp.ENRICH_ERROR_CONTEXT]: booleanValidator,
-    [SharedSystemProp.SENTRY_DSN]: urlValidator,
-    [SharedSystemProp.LOKI_PASSWORD]: stringValidator,
-    [SharedSystemProp.LOKI_URL]: urlValidator,
-    [SharedSystemProp.LOKI_USERNAME]: stringValidator,
-    [SharedSystemProp.CONTAINER_TYPE]: enumValidator(Object.values(ContainerType)),
-
+    // AppSystemProp
+    [AppSystemProp.EXECUTION_MODE]: enumValidator(Object.values(ExecutionMode)),
+    [AppSystemProp.LOG_LEVEL]: enumValidator(['error', 'warn', 'info', 'debug', 'trace']),
+    [AppSystemProp.LOG_PRETTY]: booleanValidator,
+    [AppSystemProp.ENVIRONMENT]: enumValidator(Object.values(ApEnvironment)),
+    [AppSystemProp.TRIGGER_TIMEOUT_SECONDS]: numberValidator,
+    [AppSystemProp.FLOW_TIMEOUT_SECONDS]: numberValidator,
+    [AppSystemProp.PAUSED_FLOW_TIMEOUT_DAYS]: numberValidator,
+    [AppSystemProp.APP_WEBHOOK_SECRETS]: stringValidator,
+    [AppSystemProp.MAX_FILE_SIZE_MB]: numberValidator,
+    [AppSystemProp.SANDBOX_MEMORY_LIMIT]: numberValidator,
+    [AppSystemProp.SANDBOX_PROPAGATED_ENV_VARS]: stringValidator,
+    [AppSystemProp.PIECES_SOURCE]: enumValidator(Object.values(PiecesSource)),
+    [AppSystemProp.SENTRY_DSN]: urlValidator,
+    [AppSystemProp.LOKI_PASSWORD]: stringValidator,
+    [AppSystemProp.LOKI_URL]: urlValidator,
+    [AppSystemProp.LOKI_USERNAME]: stringValidator,
+    [WorkerSystemProp.FRONTEND_URL]: urlValidator,
+    [WorkerSystemProp.CONTAINER_TYPE]: enumValidator(Object.values(ContainerType)),
+    [WorkerSystemProp.WORKER_TOKEN]: stringValidator,
     // AppSystemProp
     [AppSystemProp.API_KEY]: stringValidator,
     [AppSystemProp.API_RATE_LIMIT_AUTHN_ENABLED]: booleanValidator,
     [AppSystemProp.API_RATE_LIMIT_AUTHN_MAX]: numberValidator,
     [AppSystemProp.API_RATE_LIMIT_AUTHN_WINDOW]: stringValidator,
-    [AppSystemProp.AZURE_OPENAI_API_VERSION]: stringValidator,
-    [AppSystemProp.AZURE_OPENAI_ENDPOINT]: urlValidator,
     [AppSystemProp.CLIENT_REAL_IP_HEADER]: stringValidator,
     [AppSystemProp.CLOUD_AUTH_ENABLED]: booleanValidator,
     [AppSystemProp.CONFIG_PATH]: stringValidator,
-    [AppSystemProp.COPILOT_INSTANCE_TYPE]: stringValidator,
     [AppSystemProp.DB_TYPE]: enumValidator(Object.values(DatabaseType)),
     [AppSystemProp.DEV_PIECES]: stringValidator,
     [AppSystemProp.ENCRYPTION_KEY]: stringValidator,
@@ -81,8 +77,6 @@ const systemPropValidators: {
     [AppSystemProp.JWT_SECRET]: stringValidator,
     [AppSystemProp.LICENSE_KEY]: stringValidator,
     [AppSystemProp.MAX_CONCURRENT_JOBS_PER_PROJECT]: numberValidator,
-    [AppSystemProp.OPENAI_API_BASE_URL]: urlValidator,
-    [AppSystemProp.OPENAI_API_KEY]: stringValidator,
     [AppSystemProp.PIECES_SYNC_MODE]: enumValidator(Object.values(PieceSyncMode)),
     [AppSystemProp.POSTGRES_DATABASE]: stringValidator,
     [AppSystemProp.POSTGRES_HOST]: stringValidator,
@@ -97,8 +91,9 @@ const systemPropValidators: {
     [AppSystemProp.QUEUE_UI_ENABLED]: booleanValidator,
     [AppSystemProp.QUEUE_UI_PASSWORD]: stringValidator,
     [AppSystemProp.QUEUE_UI_USERNAME]: stringValidator,
-    [AppSystemProp.RAPID_API_KEY]: stringValidator,
     [AppSystemProp.REDIS_TYPE]: enumValidator(Object.values(RedisType)),
+    [AppSystemProp.REDIS_FAILED_JOB_RETENTION_DAYS]: numberValidator,
+    [AppSystemProp.REDIS_FAILED_JOB_RETENTION_MAX_COUNT]: numberValidator,
     [AppSystemProp.REDIS_SSL_CA_FILE]: stringValidator,
     [AppSystemProp.REDIS_DB]: numberValidator,
     [AppSystemProp.REDIS_HOST]: stringValidator,
@@ -116,6 +111,7 @@ const systemPropValidators: {
     [AppSystemProp.S3_REGION]: stringValidator,
     [AppSystemProp.S3_SECRET_ACCESS_KEY]: stringValidator,
     [AppSystemProp.S3_USE_SIGNED_URLS]: booleanValidator,
+    [AppSystemProp.S3_USE_IRSA]: booleanValidator,
     [AppSystemProp.SMTP_HOST]: stringValidator,
     [AppSystemProp.SMTP_PASSWORD]: stringValidator,
     [AppSystemProp.SMTP_PORT]: numberValidator,
@@ -134,23 +130,33 @@ const systemPropValidators: {
     [AppSystemProp.STRIPE_SECRET_KEY]: stringValidator,
     [AppSystemProp.STRIPE_WEBHOOK_SECRET]: stringValidator,
     [AppSystemProp.CLOUD_PLATFORM_ID]: stringValidator,
-    [AppSystemProp.CLOUDFLARE_AUTH_EMAIL]: (value: string) => value.includes('@') ? true : 'Value must be a valid email address',
-    [AppSystemProp.CLOUDFLARE_ZONE_ID]: stringValidator,
-    [AppSystemProp.CLOUDFLARE_API_KEY]: stringValidator,
+    [AppSystemProp.INTERNAL_URL]: stringValidator,
     [AppSystemProp.EDITION]: enumValidator(Object.values(ApEdition)),
 
-    // WorkerSystemProps
-    [WorkerSystemProps.FLOW_WORKER_CONCURRENCY]: numberValidator,
-    [WorkerSystemProps.SCHEDULED_WORKER_CONCURRENCY]: numberValidator,
-    [WorkerSystemProps.SCHEDULED_POLLING_COUNT]: numberValidator,
-    [WorkerSystemProps.POLLING_POOL_SIZE]: numberValidator,
-    [WorkerSystemProps.WORKER_TOKEN]: stringValidator,
+    // Copilot
+    [AppSystemProp.PERPLEXITY_BASE_URL]: urlValidator,
+
+    // AppSystemProp
+    [WorkerSystemProp.FLOW_WORKER_CONCURRENCY]: numberValidator,
+    [WorkerSystemProp.SCHEDULED_WORKER_CONCURRENCY]: numberValidator,
+
+    // Cloud
+    [AppSystemProp.GOOGLE_CLIENT_ID]: stringValidator,
+    [AppSystemProp.GOOGLE_CLIENT_SECRET]: stringValidator,
+
+    // Cloudflare
+    [AppSystemProp.CLOUDFLARE_API_TOKEN]: stringValidator,
+    [AppSystemProp.CLOUDFLARE_API_BASE]: stringValidator,
+    [AppSystemProp.CLOUDFLARE_ZONE_ID]: stringValidator,
+
+    // Secret Manager
+    [AppSystemProp.SECRET_MANAGER_API_KEY]: stringValidator,
 }
 
 
 
 const validateSystemPropTypes = () => {
-    const systemProperties: SystemProp[] = [...Object.values(SharedSystemProp), ...Object.values(AppSystemProp), ...Object.values(WorkerSystemProps)]
+    const systemProperties: SystemProp[] = [...Object.values(AppSystemProp), ...Object.values(AppSystemProp)]
     const errors: {
         [key in SystemProp]?: string
     } = {}
@@ -168,11 +174,25 @@ const validateSystemPropTypes = () => {
     return errors
 }
 
-export const validateEnvPropsOnStartup = async (): Promise<void> => {
+export const validateEnvPropsOnStartup = async (log: FastifyBaseLogger): Promise<void> => {
+
+    const test = system.get(AppSystemProp.ENVIRONMENT)
+    const fileStorageLocation = process.env.AP_FILE_STORAGE_LOCATION
+    if (test !== ApEnvironment.TESTING && fileStorageLocation === FileLocation.S3) {
+        try {
+            await s3Helper(log).validateS3Configuration()
+        }
+        catch (error: unknown) {
+            throw new Error(JSON.stringify({
+                message: 'S3 validation failed. Check your configuration and credentials.',
+                docUrl: 'https://www.activepieces.com/docs/install/configuration/overview#configure-s3-optional',
+            }))
+        }
+    }
 
     const errors = validateSystemPropTypes()
     if (Object.keys(errors).length > 0) {
-        logger.warn({
+        log.warn({
             errors,
         }, '[validateEnvPropsOnStartup]')
     }
@@ -189,14 +209,14 @@ export const validateEnvPropsOnStartup = async (): Promise<void> => {
     const isValidHexKey = encryptionKey && /^[A-Za-z0-9]{32}$/.test(encryptionKey)
     if (!isValidHexKey) {
         throw new Error(JSON.stringify({
-            message: 'AP_ENCRYPTION_KEY is either undefined or not a valid 32 hex string.',
+            message: 'AP_ENCRYPTION_KEY is missing or invalid. It must be a 32-character hexadecimal string (representing 16 bytes). You can generate one using the command: `openssl rand -hex 16`',
             docUrl: 'https://www.activepieces.com/docs/install/configuration/environment-variables',
         }))
     }
     const isApp = system.isApp()
     if (isApp) {
         const rentionPeriod = system.getNumberOrThrow(AppSystemProp.EXECUTION_DATA_RETENTION_DAYS)
-        const maximumPausedFlowTimeout = system.getNumberOrThrow(SharedSystemProp.PAUSED_FLOW_TIMEOUT_DAYS)
+        const maximumPausedFlowTimeout = system.getNumberOrThrow(AppSystemProp.PAUSED_FLOW_TIMEOUT_DAYS)
         if (maximumPausedFlowTimeout > rentionPeriod) {
             throw new Error(JSON.stringify({
                 message: 'AP_PAUSED_FLOW_TIMEOUT_DAYS can not exceed AP_EXECUTION_DATA_RETENTION_DAYS',
@@ -213,9 +233,8 @@ export const validateEnvPropsOnStartup = async (): Promise<void> => {
     }
 
     const edition = system.getEdition()
-    const test = system.get(SharedSystemProp.ENVIRONMENT)
     if ([ApEdition.CLOUD, ApEdition.ENTERPRISE].includes(edition) && test !== ApEnvironment.TESTING) {
-        const executionMode = system.getOrThrow<ExecutionMode>(SharedSystemProp.EXECUTION_MODE)
+        const executionMode = system.getOrThrow<ExecutionMode>(AppSystemProp.EXECUTION_MODE)
         if (![ExecutionMode.SANDBOXED, ExecutionMode.SANDBOX_CODE_ONLY].includes(executionMode)) {
             throw new Error(JSON.stringify({
                 message: 'Execution mode UNSANDBOXED is no longer supported in this edition, check the documentation for recent changes',

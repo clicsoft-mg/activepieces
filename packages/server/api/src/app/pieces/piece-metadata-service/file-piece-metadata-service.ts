@@ -1,6 +1,6 @@
 
 import { PieceMetadata, PieceMetadataModel, PieceMetadataModelSummary } from '@activepieces/pieces-framework'
-import { filePiecesUtils } from '@activepieces/server-shared'
+import { AppSystemProp, filePiecesUtils } from '@activepieces/server-shared'
 
 import {
     ActivepiecesError,
@@ -12,7 +12,9 @@ import {
     PieceType,
     ProjectId,
 } from '@activepieces/shared'
+import { FastifyBaseLogger } from 'fastify'
 import { nanoid } from 'nanoid'
+import { system } from '../../helper/system/system'
 import {
     PieceMetadataSchema,
 } from '../piece-metadata-entity'
@@ -21,12 +23,13 @@ import { PieceMetadataService } from './piece-metadata-service'
 import { toPieceMetadataModelSummary } from '.'
 
 const loadPiecesMetadata = async (): Promise<PieceMetadata[]> => {
-    const pieces = await filePiecesUtils.findAllPieces()
+    const packages = system.getOrThrow(AppSystemProp.DEV_PIECES)?.split(',')
+    const pieces = await filePiecesUtils(packages, system.globalLogger()).findAllPieces()
     return pieces.sort((a, b) =>
         a.displayName.toUpperCase().localeCompare(b.displayName.toUpperCase()),
     )
 }
-export const FilePieceMetadataService = (): PieceMetadataService => {
+export const FilePieceMetadataService = (_log: FastifyBaseLogger): PieceMetadataService => {
     return {
         async list(params): Promise<PieceMetadataModelSummary[]> {
             const { projectId } = params
@@ -109,11 +112,6 @@ export const FilePieceMetadataService = (): PieceMetadataService => {
                 projectId,
             })
         },
-
-        async delete(): Promise<void> {
-            throw new Error('Deleting pieces is not supported in development mode')
-        },
-
         async create(): Promise<PieceMetadataModel> {
             throw new Error('Creating pieces is not supported in development mode')
         },

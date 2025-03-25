@@ -12,7 +12,6 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
-  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   Form,
@@ -30,30 +29,33 @@ import {
   GitPushOperationType,
   PushGitRepoRequest,
 } from '@activepieces/ee-shared';
-import { assertNotNullOrUndefined } from '@activepieces/shared';
+import {
+  assertNotNullOrUndefined,
+  ErrorCode,
+  PopulatedFlow,
+} from '@activepieces/shared';
 
 import { gitSyncApi } from '../lib/git-sync-api';
 import { gitSyncHooks } from '../lib/git-sync-hooks';
 
 type PushToGitDialogProps = {
-  flowIds: string[];
+  flows: PopulatedFlow[];
   children?: React.ReactNode;
 };
 
-const PushToGitDialog = ({ children, flowIds }: PushToGitDialogProps) => {
+const PushToGitDialog = ({ children, flows }: PushToGitDialogProps) => {
   const [open, setOpen] = React.useState(false);
 
   const { platform } = platformHooks.useCurrentPlatform();
   const { gitSync } = gitSyncHooks.useGitSync(
     authenticationSession.getProjectId()!,
-    platform.gitSyncEnabled,
+    platform.environmentsEnabled,
   );
-
   const form = useForm<PushGitRepoRequest>({
     defaultValues: {
       type: GitPushOperationType.PUSH_FLOW,
       commitMessage: '',
-      flowId: '',
+      flowIds: [],
     },
     resolver: typeboxResolver(PushGitRepoRequest),
   });
@@ -61,11 +63,10 @@ const PushToGitDialog = ({ children, flowIds }: PushToGitDialogProps) => {
   const { mutate, isPending } = useMutation({
     mutationFn: async (request: PushGitRepoRequest) => {
       assertNotNullOrUndefined(gitSync, 'gitSync');
-      await Promise.all(
-        flowIds.map((flowId) =>
-          gitSyncApi.push(gitSync.id, { ...request, flowId }),
-        ),
-      );
+      await gitSyncApi.push(gitSync.id, {
+        ...request,
+        flowIds: flows.map((flow) => flow.id),
+      });
     },
     onSuccess: () => {
       toast({
@@ -75,8 +76,16 @@ const PushToGitDialog = ({ children, flowIds }: PushToGitDialogProps) => {
       });
       setOpen(false);
     },
-    onError: () => {
-      toast(INTERNAL_ERROR_TOAST);
+    onError: (error: any) => {
+      if (error.response.data.code === ErrorCode.FLOW_OPERATION_INVALID) {
+        toast({
+          title: t('Invalid Operation'),
+          description: error.response.data.params.message,
+          duration: 3000,
+        });
+      } else {
+        toast(INTERNAL_ERROR_TOAST);
+      }
     },
   });
 
@@ -91,11 +100,6 @@ const PushToGitDialog = ({ children, flowIds }: PushToGitDialogProps) => {
           <form onSubmit={form.handleSubmit((data) => mutate(data))}>
             <DialogHeader>
               <DialogTitle>{t('Push to Git')}</DialogTitle>
-              <DialogDescription>
-                {t(
-                  'Enter a commit message to describe the changes you want to push.',
-                )}
-              </DialogDescription>
             </DialogHeader>
             <FormField
               control={form.control}
@@ -109,7 +113,22 @@ const PushToGitDialog = ({ children, flowIds }: PushToGitDialogProps) => {
                 </FormItem>
               )}
             />
+            <div className="text-sm text-gray-500 mt-2">
+              {t(
+                'Enter a commit message to describe the changes you want to push.',
+              )}
+            </div>
             <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setOpen(false);
+                  form.reset();
+                }}
+              >
+                {t('Cancel')}
+              </Button>
               <Button
                 type="submit"
                 loading={isPending}

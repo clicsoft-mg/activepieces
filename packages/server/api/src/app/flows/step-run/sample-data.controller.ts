@@ -1,5 +1,4 @@
-import { logger } from '@activepieces/server-shared'
-import { CreateStepRunRequestBody, GetSampleDataRequest, PrincipalType, SaveSampleDataRequest, SaveSampleDataResponse, StepRunResponse, WebsocketClientEvent, WebsocketServerEvent } from '@activepieces/shared'
+import { CreateStepRunRequestBody, FileType, GetSampleDataRequest, PrincipalType, SaveSampleDataRequest, SaveSampleDataResponse, SERVICE_KEY_SECURITY_OPENAPI, StepRunResponse, WebsocketClientEvent, WebsocketServerEvent } from '@activepieces/shared'
 import { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox'
 import { StatusCodes } from 'http-status-codes'
 import { accessTokenManager } from '../../authentication/lib/access-token-manager'
@@ -11,8 +10,8 @@ export const sampleDataController: FastifyPluginAsyncTypebox = async (fastify) =
     websocketService.addListener(WebsocketServerEvent.TEST_STEP_RUN, (socket) => {
         return async (data: CreateStepRunRequestBody) => {
             const principal = await accessTokenManager.verifyPrincipal(socket.handshake.auth.token)
-            logger.debug({ data }, '[Socket#testStepRun]')
-            const stepRun = await sampleDataService.runAction({
+            fastify.log.debug({ data }, '[Socket#testStepRun]')
+            const stepRun = await sampleDataService(fastify.log).runAction({
                 projectId: principal.projectId,
                 platformId: principal.platform.id,
                 flowVersionId: data.flowVersionId,
@@ -22,6 +21,7 @@ export const sampleDataController: FastifyPluginAsyncTypebox = async (fastify) =
             const response: StepRunResponse = {
                 id: data.id,
                 success: stepRun.success,
+                input: stepRun.input,
                 output: stepRun.output,
                 standardError: stepRun.standardError,
                 standardOutput: stepRun.standardOutput,
@@ -32,24 +32,26 @@ export const sampleDataController: FastifyPluginAsyncTypebox = async (fastify) =
 
 
     fastify.post('/', SaveSampleRequest, async (request) => {
-        return sampleDataService.save({
+        return sampleDataService(request.log).save({
             projectId: request.principal.projectId,
             flowVersionId: request.body.flowVersionId,
             stepName: request.body.stepName,
             payload: request.body.payload,
+            fileType: request.body.fileType ?? FileType.SAMPLE_DATA,
         })
     })
 
     fastify.get('/', GetSampleDataRequestParams, async (request) => {
-        const flow = await flowService.getOnePopulatedOrThrow({
+        const flow = await flowService(request.log).getOnePopulatedOrThrow({
             id: request.query.flowId,
             projectId: request.principal.projectId,
             versionId: request.query.flowVersionId,
         })
-        const sampleData = await sampleDataService.getOrReturnEmpty({
+        const sampleData = await sampleDataService(request.log).getOrReturnEmpty({
             projectId: request.principal.projectId,
             flowVersion: flow.version,
             stepName: request.query.stepName,
+            fileType: request.query.fileType ?? FileType.SAMPLE_DATA,
         })
         return sampleData
     })
@@ -57,10 +59,12 @@ export const sampleDataController: FastifyPluginAsyncTypebox = async (fastify) =
 
 const SaveSampleRequest = {
     config: {
-        allowedPrincipals: [PrincipalType.USER],
+        allowedPrincipals: [PrincipalType.USER, PrincipalType.SERVICE],
     },
     schema: {
+        tags: ['sample-data'],
         body: SaveSampleDataRequest,
+        security: [SERVICE_KEY_SECURITY_OPENAPI],
         response: {
             [StatusCodes.OK]: SaveSampleDataResponse,
         },
@@ -69,9 +73,11 @@ const SaveSampleRequest = {
 
 const GetSampleDataRequestParams = {
     config: {
-        allowedPrincipals: [PrincipalType.USER],
+        allowedPrincipals: [PrincipalType.USER, PrincipalType.SERVICE],
     },
     schema: {
+        tags: ['sample-data'],
         querystring: GetSampleDataRequest,
+        security: [SERVICE_KEY_SECURITY_OPENAPI],
     },
 }

@@ -1,4 +1,4 @@
-import deepmerge from 'deepmerge'
+import { deepmerge } from 'deepmerge-ts'
 
 export function isString(str: unknown): str is string {
     return str != null && typeof str === 'string'
@@ -45,6 +45,9 @@ type DeepPartial<T> = {
     [P in keyof T]?: T[P] extends Record<string, unknown> ? DeepPartial<T[P]> : T[P];
 }
 
+/**
+ * This function also merges arrays, x = [1, 2], y = [3, 4], z = deepMergeAndCast(x, y) -> [1, 2, 3, 4]
+**/
 export function deepMergeAndCast<T>(target: DeepPartial<T>, source: DeepPartial<T>): T {
     return deepmerge(target as Partial<T>, source as Partial<T>) as T
 }

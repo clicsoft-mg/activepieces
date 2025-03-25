@@ -2,10 +2,11 @@ import { Static, Type } from '@sinclair/typebox'
 
 export const CreateTrialLicenseKeyRequestBody = Type.Object({
     email: Type.String(),
-    fullName: Type.String(),
     companyName: Type.String(),
     goal: Type.String(),
-    numberOfEmployees: Type.String(),
+    keyType: Type.Optional(Type.String()),
+    disabledFeatures: Type.Optional(Type.Array(Type.String())),
+    isEmbeddingsEnabled: Type.Optional(Type.Boolean()),
 })
 
 export type CreateTrialLicenseKeyRequestBody = Static<typeof CreateTrialLicenseKeyRequestBody>
@@ -26,7 +27,7 @@ export const LicenseKeyEntity = Type.Object({
     isTrial: Type.Boolean(),
     key: Type.String(),
     ssoEnabled: Type.Boolean(),
-    gitSyncEnabled: Type.Boolean(),
+    environmentsEnabled: Type.Boolean(),
     showPoweredBy: Type.Boolean(),
     embeddingEnabled: Type.Boolean(),
     auditLogEnabled: Type.Boolean(),

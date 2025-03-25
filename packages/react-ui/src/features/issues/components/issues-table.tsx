@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ColumnDef } from '@tanstack/react-table';
 import { t } from 'i18next';
-import { Check } from 'lucide-react';
+import { Check, CheckCircle } from 'lucide-react';
 import { useMemo } from 'react';
 import {
   createSearchParams,
@@ -40,9 +40,9 @@ export default function IssuesTable() {
   );
 
   const [searchParams] = useSearchParams();
-
+  const projectId = authenticationSession.getProjectId()!;
   const { data, isLoading } = useQuery({
-    queryKey: ['issues', searchParams.toString()],
+    queryKey: ['issues', searchParams.toString(), projectId],
     staleTime: 0,
     gcTime: 0,
     queryFn: () => {
@@ -51,7 +51,7 @@ export default function IssuesTable() {
         ? parseInt(searchParams.get(LIMIT_QUERY_PARAM)!)
         : 10;
       return issuesApi.list({
-        projectId: authenticationSession.getProjectId()!,
+        projectId,
         cursor: cursor ?? undefined,
         limit,
       });
@@ -149,7 +149,7 @@ export default function IssuesTable() {
     ],
     [userHasPermissionToMarkAsResolved, handleMarkAsResolved, t],
   );
-  const userHasPermisionToSeeRuns = checkAccess(Permission.READ_RUN);
+  const userHasPermissionToSeeRuns = checkAccess(Permission.READ_RUN);
   const handleRowClick = ({
     newWindow,
     flowId,
@@ -168,11 +168,12 @@ export default function IssuesTable() {
         FlowRunStatus.TIMEOUT,
       ],
     }).toString();
+    const pathname = authenticationSession.appendProjectRoutePrefix('/runs');
     if (newWindow) {
-      openNewWindow('/runs', searchParams);
+      openNewWindow(pathname, searchParams);
     } else {
       navigate({
-        pathname: '/runs',
+        pathname,
         search: searchParams,
       });
     }
@@ -190,6 +191,11 @@ export default function IssuesTable() {
         <div className="ml-auto"></div>
       </div>
       <DataTable
+        emptyStateTextTitle={t('No issues found')}
+        emptyStateTextDescription={t(
+          'All your workflows are running smoothly.',
+        )}
+        emptyStateIcon={<CheckCircle className="size-14" />}
         page={data}
         isLoading={isLoading}
         columns={columns}
@@ -226,7 +232,7 @@ export default function IssuesTable() {
           },
         ]}
         onRowClick={
-          userHasPermisionToSeeRuns
+          userHasPermissionToSeeRuns
             ? (row, newWindow) =>
                 handleRowClick({
                   newWindow,

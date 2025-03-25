@@ -48,18 +48,17 @@ const useAnimateSidebar = (
   sidebarValue: LeftSideBarType | RightSideBarType,
 ) => {
   const handleRef = useRef<ImperativePanelHandle>(null);
-  const sidebarbarClosed = [
-    LeftSideBarType.NONE,
-    RightSideBarType.NONE,
-  ].includes(sidebarValue);
+  const sidebarClosed = [LeftSideBarType.NONE, RightSideBarType.NONE].includes(
+    sidebarValue,
+  );
   useEffect(() => {
     const sidebarSize = handleRef.current?.getSize() ?? 0;
-    if (sidebarbarClosed) {
+    if (sidebarClosed) {
       handleRef.current?.resize(0);
     } else if (sidebarSize === 0) {
       handleRef.current?.resize(25);
     }
-  }, [handleRef, sidebarValue, sidebarbarClosed]);
+  }, [handleRef, sidebarValue, sidebarClosed]);
   return handleRef;
 };
 
@@ -158,12 +157,6 @@ const BuilderPage = () => {
     return () => {
       socket.removeAllListeners(WebsocketClientEvent.REFRESH_PIECE);
       socket.removeAllListeners(WebsocketClientEvent.FLOW_RUN_PROGRESS);
-      socket.removeAllListeners(WebsocketClientEvent.TEST_STEP_FINISHED);
-      socket.removeAllListeners(WebsocketClientEvent.TEST_FLOW_RUN_STARTED);
-      socket.removeAllListeners(WebsocketClientEvent.GENERATE_CODE_FINISHED);
-      socket.removeAllListeners(
-        WebsocketClientEvent.GENERATE_HTTP_REQUEST_FINISHED,
-      );
     };
   }, [socket.id, run?.id]);
 

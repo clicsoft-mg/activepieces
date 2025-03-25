@@ -1,20 +1,17 @@
-import { useEmbedding } from '../../components/embed-provider';
-import { LoadingSpinner } from '../../components/ui/spinner';
+import { LoadingSpinner } from '@/components/ui/spinner';
+
 import { cn } from '../../lib/utils';
 
-export const LoadingScreen = () => {
-  const { embedState } = useEmbedding();
-  const isInEmbedding =
-    window.location.pathname.startsWith('/embed') || embedState.isEmbedded;
+export const LoadingScreen = ({
+  brightSpinner = false,
+}: {
+  brightSpinner?: boolean;
+}) => {
   return (
-    <div
-      className={cn('flex h-screen w-screen items-center justify-center ', {
-        'black/80': isInEmbedding,
-      })}
-    >
+    <div className="flex h-screen w-screen items-center justify-center">
       <LoadingSpinner
         className={cn({
-          'stroke-background': isInEmbedding,
+          '!stroke-background': brightSpinner,
         })}
         size={50}
       ></LoadingSpinner>

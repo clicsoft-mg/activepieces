@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { HttpStatusCode } from 'axios';
 import { t } from 'i18next';
 import { MailCheck, MailX } from 'lucide-react';
-import { useLayoutEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Card } from '@/components/ui/card';
@@ -17,15 +17,14 @@ const VerifyEmail = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const otp = searchParams.get('otpcode');
-  const userId = searchParams.get('userId');
-  useLayoutEffect(() => {
-    mutate();
-  }, []);
+  const identityId = searchParams.get('identityId');
+  const hasMutated = useRef(false);
+
   const { mutate, isPending } = useMutation({
     mutationFn: async () => {
       return await authenticationApi.verifyEmail({
         otp: otp!,
-        userId: userId!,
+        identityId: identityId!,
       });
     },
     onSuccess: () => {
@@ -46,11 +45,18 @@ const VerifyEmail = () => {
     },
   });
 
-  if (!otp || !userId) {
+  useEffect(() => {
+    if (otp && identityId && !hasMutated.current) {
+      mutate();
+      hasMutated.current = true;
+    }
+  }, [otp, identityId, mutate]);
+
+  if (!otp || !identityId) {
     return <Navigate to="/sign-in" replace />;
   }
   return (
-    <div className="h-screen w-screen flex flex-col  items-center justify-center gap-2">
+    <div className="mx-auto h-screen w-screen flex flex-col items-center justify-center gap-2">
       <FullLogo />
 
       <Card className="w-[28rem] rounded-sm drop-shadow-xl p-4">

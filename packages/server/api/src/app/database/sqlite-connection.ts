@@ -1,8 +1,9 @@
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { AppSystemProp, SharedSystemProp, system } from '@activepieces/server-shared'
+import { AppSystemProp } from '@activepieces/server-shared'
 import { ApEdition, ApEnvironment } from '@activepieces/shared'
 import { DataSource, MigrationInterface } from 'typeorm'
+import { system } from '../helper/system/system'
 import { commonProperties } from './database-connection'
 import { AddPieceTypeAndPackageTypeToFlowVersion1696245170061 } from './migration/common/1696245170061-add-piece-type-and-package-type-to-flow-version'
 import { StoreCodeInsideFlow1697969398200 } from './migration/common/1697969398200-store-code-inside-flow'
@@ -75,6 +76,19 @@ import { AddIndiciesToTriggerEventSqlite1732324359348 } from './migration/sqlite
 import { AddIndiciesToRunSqlite1732324481815 } from './migration/sqlite/1732324481815-AddIndiciesToRunSqlite'
 import { CreateProjectRoleTableSqlite1732482844483 } from './migration/sqlite/1732482844483-CreateProjectRoleTableSqlite'
 import { AddProjectRelationInUserInvitationSqlite1732791068873 } from './migration/sqlite/1732791068873-AddProjectRelationInUserInvitationSqlite'
+import { TablesProductSqlite1734354249984 } from './migration/sqlite/1734354249984-TablesProductSqlite'
+import { RemoveWorkerTypeSqlite1734439194575 } from './migration/sqlite/1734439194575-RemoveWorkerTypeSqlite'
+import { AddCopilotSettingsSqlite1734479435668 } from './migration/sqlite/1734479435668-AddCopilotSettingsSqlite'
+import { FieldAndRecordAndCellProjectId1734967659746 } from './migration/sqlite/1734967659746-FieldAndRecordAndCell_ProjectIdSqlite'
+import { AddCellUniqueIndex1735057433052 } from './migration/sqlite/1735057433052-AddCellUniqueIndexSqlite'
+import { AddExternalIdForFlowSqlite1735262810939 } from './migration/sqlite/1735262810939-AddExternalIdForFlowSqlite'
+import { AddUserIdentitySqlite1735602676499 } from './migration/sqlite/1735602676499-AddUserIdentitySqlite'
+import { TableWebhooksSqlite1737550783153 } from './migration/sqlite/1737550783153-TableWebhooksSqlite'
+import { RestrictPiecesSqlite1739544872722 } from './migration/sqlite/1739544872722-RestrictPiecesSqlite'
+import { TableWebhooksIsArraySqlite1741668828922 } from './migration/sqlite/1741668828922-TableWebhooksIsArraySqlite'
+import { AddManualTaskTable1742304913465 } from './migration/sqlite/1742304913465-AddManualTaskTable'
+import { AddDataColumnToFieldEntity1742390870702 } from './migration/sqlite/1742390870702-AddDataColumnToFieldEntity'
+import { ChangeManualTasksToTodoSqlite1742432169253 } from './migration/sqlite/1742432169253-ChangeManualTasksToTodoSqlite'
 
 const getSqliteDatabaseFilePath = (): string => {
     const apConfigDirectoryPath = system.getOrThrow(AppSystemProp.CONFIG_PATH)
@@ -87,7 +101,7 @@ const getSqliteDatabaseInMemory = (): string => {
 }
 
 const getSqliteDatabase = (): string => {
-    const env = system.getOrThrow<ApEnvironment>(SharedSystemProp.ENVIRONMENT)
+    const env = system.getOrThrow<ApEnvironment>(AppSystemProp.ENVIRONMENT)
 
     if (env === ApEnvironment.TESTING) {
         return getSqliteDatabaseInMemory()
@@ -168,6 +182,19 @@ const getMigrations = (): (new () => MigrationInterface)[] => {
         AddIndiciesToTriggerEventSqlite1732324359348,
         AddIndiciesToRunSqlite1732324481815,
         AddProjectRelationInUserInvitationSqlite1732791068873,
+        TablesProductSqlite1734354249984,
+        RemoveWorkerTypeSqlite1734439194575,
+        FieldAndRecordAndCellProjectId1734967659746,
+        AddCellUniqueIndex1735057433052,
+        TableWebhooksSqlite1737550783153,
+        AddCopilotSettingsSqlite1734479435668,
+        AddExternalIdForFlowSqlite1735262810939,
+        AddUserIdentitySqlite1735602676499,
+        RestrictPiecesSqlite1739544872722,
+        TableWebhooksIsArraySqlite1741668828922,
+        AddDataColumnToFieldEntity1742390870702,
+        AddManualTaskTable1742304913465,
+        ChangeManualTasksToTodoSqlite1742432169253,
     ]
     const edition = system.getEdition()
     if (edition !== ApEdition.COMMUNITY) {
@@ -177,7 +204,7 @@ const getMigrations = (): (new () => MigrationInterface)[] => {
 }
 
 const getMigrationConfig = (): MigrationConfig => {
-    const env = system.getOrThrow<ApEnvironment>(SharedSystemProp.ENVIRONMENT)
+    const env = system.getOrThrow<ApEnvironment>(AppSystemProp.ENVIRONMENT)
 
     if (env === ApEnvironment.TESTING) {
         return {}

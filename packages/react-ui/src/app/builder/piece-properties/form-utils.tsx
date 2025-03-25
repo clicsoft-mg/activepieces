@@ -1,11 +1,14 @@
 import { TSchema, Type } from '@sinclair/typebox';
+import { t } from 'i18next';
 
 import {
   CONNECTION_REGEX,
+  CustomAuthProperty,
   OAuth2Props,
   PieceAuthProperty,
   PieceMetadata,
   PieceMetadataModel,
+  PieceMetadataModelSummary,
   PiecePropertyMap,
   PropertyType,
 } from '@activepieces/pieces-framework';
@@ -27,6 +30,13 @@ import {
   RouterBranchesSchema,
   SampleDataSetting,
   RouterExecutionType,
+  UpsertOAuth2Request,
+  UpsertCloudOAuth2Request,
+  UpsertPlatformOAuth2Request,
+  UpsertAppConnectionRequestBody,
+  UpsertCustomAuthRequest,
+  UpsertBasicAuthRequest,
+  UpsertSecretTextRequest,
 } from '@activepieces/shared';
 
 function addAuthToPieceProps(
@@ -89,6 +99,85 @@ function buildInputSchemaForStep(
     }
     default:
       throw new Error('Unsupported type: ' + type);
+  }
+}
+
+function buildConnectionSchema(
+  piece: PieceMetadataModelSummary | PieceMetadataModel,
+) {
+  const auth = piece.auth;
+  if (isNil(auth)) {
+    return Type.Object({
+      request: Type.Composite([
+        Type.Omit(UpsertAppConnectionRequestBody, ['externalId']),
+      ]),
+    });
+  }
+  const connectionSchema = Type.Object({
+    externalId: Type.String({
+      pattern: '^[A-Za-z0-9_\\-@\\+\\.]*$',
+      minLength: 1,
+      errorMessage: t('Name can only contain letters, numbers and underscores'),
+    }),
+  });
+
+  switch (auth.type) {
+    case PropertyType.SECRET_TEXT:
+      return Type.Object({
+        request: Type.Composite([
+          Type.Omit(UpsertSecretTextRequest, ['externalId', 'displayName']),
+          connectionSchema,
+        ]),
+      });
+    case PropertyType.BASIC_AUTH:
+      return Type.Object({
+        request: Type.Composite([
+          Type.Omit(UpsertBasicAuthRequest, ['externalId', 'displayName']),
+          connectionSchema,
+        ]),
+      });
+    case PropertyType.CUSTOM_AUTH:
+      return Type.Object({
+        request: Type.Composite([
+          Type.Omit(UpsertCustomAuthRequest, [
+            'externalId',
+            'value',
+            'displayName',
+          ]),
+          connectionSchema,
+          Type.Object({
+            value: Type.Object({
+              props: formUtils.buildSchema(
+                (piece.auth as CustomAuthProperty<any>).props,
+              ),
+            }),
+          }),
+        ]),
+      });
+    case PropertyType.OAUTH2:
+      return Type.Object({
+        request: Type.Composite([
+          Type.Omit(
+            Type.Union([
+              UpsertOAuth2Request,
+              UpsertCloudOAuth2Request,
+              UpsertPlatformOAuth2Request,
+            ]),
+            ['externalId', 'displayName'],
+          ),
+          connectionSchema,
+        ]),
+      });
+    default:
+      return Type.Object({
+        request: Type.Composite([
+          Type.Omit(UpsertAppConnectionRequestBody, [
+            'externalId',
+            'displayName',
+          ]),
+          connectionSchema,
+        ]),
+      });
   }
 }
 
@@ -304,6 +393,7 @@ export const formUtils = {
         case PropertyType.DATE_TIME:
         case PropertyType.SHORT_TEXT:
         case PropertyType.LONG_TEXT:
+        case PropertyType.COLOR:
         case PropertyType.FILE:
           propsSchema[name] = Type.String({
             minLength: property.required ? 1 : undefined,
@@ -348,15 +438,16 @@ export const formUtils = {
           ]);
           break;
         case PropertyType.ARRAY: {
-          const arraySchema = isNil(property.properties)
+          const arrayItemSchema = isNil(property.properties)
             ? Type.String({
                 minLength: property.required ? 1 : undefined,
               })
             : formUtils.buildSchema(property.properties);
           propsSchema[name] = Type.Union([
-            Type.Array(arraySchema, {
+            Type.Array(arrayItemSchema, {
               minItems: property.required ? 1 : undefined,
             }),
+            Type.Record(Type.String(), Type.Unknown()),
             Type.String({
               minLength: property.required ? 1 : undefined,
             }),
@@ -392,6 +483,9 @@ export const formUtils = {
         case PropertyType.DYNAMIC:
           propsSchema[name] = Type.Record(Type.String(), Type.Any());
           break;
+        case PropertyType.CUSTOM:
+          propsSchema[name] = Type.Unknown();
+          break;
       }
 
       //optional array is checked against its children
@@ -408,24 +502,38 @@ export const formUtils = {
     return Type.Object(propsSchema);
   },
   getDefaultValueForStep,
+  buildConnectionSchema,
 };
 
 export function getDefaultValueForStep(
   props: PiecePropertyMap | OAuth2Props,
   existingInput: Record<string, unknown>,
+  customizedInput?: Record<string, boolean>,
 ): Record<string, unknown> {
   const defaultValues: Record<string, unknown> = {};
   const entries = Object.entries(props);
   for (const [name, property] of entries) {
     switch (property.type) {
-      case PropertyType.CHECKBOX:
+      case PropertyType.CHECKBOX: {
         defaultValues[name] =
           existingInput[name] ?? property.defaultValue ?? false;
         break;
-      case PropertyType.ARRAY:
-        defaultValues[name] =
-          existingInput[name] ?? property.defaultValue ?? [];
+      }
+      case PropertyType.ARRAY: {
+        const isCustomizedArrayOfProperties =
+          !isNil(customizedInput) &&
+          customizedInput[name] &&
+          !isNil(property.properties);
+        const existingValue = existingInput[name];
+        if (!isNil(existingValue)) {
+          defaultValues[name] = existingValue;
+        } else if (isCustomizedArrayOfProperties) {
+          defaultValues[name] = {};
+        } else {
+          defaultValues[name] = property.defaultValue ?? [];
+        }
         break;
+      }
       case PropertyType.MARKDOWN:
       case PropertyType.DATE_TIME:
       case PropertyType.SHORT_TEXT:
@@ -436,6 +544,8 @@ export function getDefaultValueForStep(
       case PropertyType.BASIC_AUTH:
       case PropertyType.CUSTOM_AUTH:
       case PropertyType.SECRET_TEXT:
+      case PropertyType.CUSTOM:
+      case PropertyType.COLOR:
       case PropertyType.OAUTH2: {
         defaultValues[name] = existingInput[name] ?? property.defaultValue;
         break;

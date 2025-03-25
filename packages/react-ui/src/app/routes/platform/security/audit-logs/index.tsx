@@ -1,7 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { t } from 'i18next';
-import { Folder, Key, Link2, Logs, Users, Wand, Workflow } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import {
+  CheckIcon,
+  Folder,
+  History,
+  Key,
+  Link2,
+  Logs,
+  Users,
+  Wand,
+  Workflow,
+} from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import LockedFeatureGuard from '@/app/components/locked-feature-guard';
 import {
@@ -75,6 +85,13 @@ export default function AuditLogsPage() {
         }) ?? [],
       icon: Folder,
     } as const,
+    {
+      type: 'date',
+      title: t('Created'),
+      accessorKey: 'created',
+      options: [],
+      icon: CheckIcon,
+    } as const,
   ];
 
   const { data: auditLogsData, isLoading } = useQuery({
@@ -84,8 +101,8 @@ export default function AuditLogsPage() {
     queryFn: async () => {
       const cursor = searchParams.get(CURSOR_QUERY_PARAM);
       const limit = searchParams.get(LIMIT_QUERY_PARAM);
-      const action = searchParams.get('action');
-      const projectId = searchParams.get('projectId');
+      const action = searchParams.getAll('action');
+      const projectId = searchParams.getAll('projectId');
       const userId = searchParams.get('userId');
       return auditEventsApi.list({
         cursor: cursor ?? undefined,
@@ -93,6 +110,8 @@ export default function AuditLogsPage() {
         action: action ?? undefined,
         projectId: projectId ?? undefined,
         userId: userId ?? undefined,
+        createdBefore: searchParams.get('createdBefore') ?? undefined,
+        createdAfter: searchParams.get('createdAfter') ?? undefined,
       });
     },
   });
@@ -108,8 +127,17 @@ export default function AuditLogsPage() {
       )}
     >
       <div className="flex flex-col  w-full">
-        <TableTitle>{t('Audit Logs')}</TableTitle>
+        <TableTitle
+          description={t('Track activities done within your platform')}
+        >
+          {t('Audit Logs')}
+        </TableTitle>
         <DataTable
+          emptyStateTextTitle={t('No audit logs found')}
+          emptyStateTextDescription={t(
+            'Come back later when you have some activity to audit',
+          )}
+          emptyStateIcon={<History className="size-14" />}
           filters={filters}
           columns={[
             {
@@ -184,10 +212,13 @@ export default function AuditLogsPage() {
                 <DataTableColumnHeader column={column} title={t('Project')} />
               ),
               cell: ({ row }) => {
-                return 'project' in row.original.data ? (
-                  <div className="text-left">
-                    {row.original.data.project?.displayName}
-                  </div>
+                return row.original.projectId &&
+                  'project' in row.original.data ? (
+                  <Link to={`/projects/${row.original.projectId}`}>
+                    <div className="text-left text-primary hover:underline">
+                      {row.original.data.project?.displayName}
+                    </div>
+                  </Link>
                 ) : (
                   <div className="text-left">{t('N/A')}</div>
                 );

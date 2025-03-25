@@ -37,7 +37,7 @@ export type BaseEngineOperation = {
     projectId: ProjectId
     engineToken: string
     internalApiUrl: string
-    publicUrl: string
+    publicApiUrl: string
 }
 
 export type ExecuteValidateAuthOperation = Omit<BaseEngineOperation, 'projectId'> & {
@@ -99,12 +99,13 @@ export type ExecuteTriggerOperation<HT extends TriggerHookType> = BaseEngineOper
     webhookUrl: string
     triggerPayload?: TriggerPayload
     appWebhookUrl?: string
-    webhookSecret?: string
+    webhookSecret?: string | Record<string, string>
 }
 
 
 export type TriggerPayload<T = unknown> = {
     body: T
+    rawBody?: unknown
     headers: Record<string, string>
     queryParams: Record<string, string>
 }
@@ -170,6 +171,7 @@ export type ExecuteTriggerResponse<H extends TriggerHookType> = H extends Trigge
 
 export type ExecuteActionResponse = {
     success: boolean
+    input: unknown
     output: unknown
     message?: string
 }
@@ -202,4 +204,5 @@ export enum EngineResponseStatus {
     OK = 'OK',
     ERROR = 'ERROR',
     TIMEOUT = 'TIMEOUT',
+    MEMORY_ISSUE = 'MEMORY_ISSUE',
 }

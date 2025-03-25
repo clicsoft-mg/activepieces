@@ -24,6 +24,12 @@ module.exports = {
       },
     },
     extend: {
+      width: {
+        '4.5': '1.125rem'
+      },
+      height: {
+        '4.5': '1.125rem',
+      },
       transitionDuration: {
         1500: '1500ms',
       },
@@ -36,6 +42,16 @@ module.exports = {
         },
         border: {
           DEFAULT: 'hsl(var(--border))',
+        },
+        sidebar: {
+          DEFAULT: 'hsl(var(--sidebar-background))',
+          foreground: 'hsl(var(--sidebar-foreground))',
+          primary: 'hsl(var(--sidebar-primary))',
+          'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
+          accent: 'hsl(var(--sidebar-accent))',
+          'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
+          border: 'hsl(var(--sidebar-border))',
+          ring: 'hsl(var(--sidebar-ring))',
         },
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
@@ -89,6 +105,7 @@ module.exports = {
         sans: ['var(--font-sans)', ...fontFamily.sans],
       },
       fontSize: {
+        'xss': '0.65rem',
         '3xl': '1.75rem',
         '4xl': '2rem',
       },
@@ -118,6 +135,17 @@ module.exports = {
             width: "100%",
           }
         },
+        'ask-ai-background':{
+         '0%': {
+          backgroundPosition: '0%'
+          },
+          '50%': {
+            backgroundPosition: '100%'
+          },
+          '100%': {
+            backgroundPosition: '0%'
+          }
+        }
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
@@ -125,6 +153,7 @@ module.exports = {
         fade: 'fade 0.2s ease-out',
         typing: 'typing 0.7s steps(7) alternate',
         'typing-sm': 'typing 0.5s steps(5) alternate',
+        'ask-ai-background' : 'ask-ai-background 4s ease-in-out infinite'
       },
       boxShadow: {
         'step-container': '0px 0px 22px hsl(var(--border) / 0.4)',

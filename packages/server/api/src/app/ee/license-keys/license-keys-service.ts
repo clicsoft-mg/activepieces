@@ -1,23 +1,22 @@
-import { logger, rejectedPromiseHandler } from '@activepieces/server-shared'
-import { ActivepiecesError, ApEdition, CreateTrialLicenseKeyRequestBody, ErrorCode, isNil, LicenseKeyEntity, PackageType, PlatformRole, TelemetryEventName, UserStatus } from '@activepieces/shared'
+import { AppSystemProp, rejectedPromiseHandler } from '@activepieces/server-shared'
+import { ActivepiecesError, CreateTrialLicenseKeyRequestBody, ErrorCode, isNil, LicenseKeyEntity, PlatformRole, TelemetryEventName, UserStatus } from '@activepieces/shared'
 import dayjs from 'dayjs'
+import { FastifyBaseLogger } from 'fastify'
 import { StatusCodes } from 'http-status-codes'
-import { flagService } from '../../flags/flag.service'
+import { system } from '../../helper/system/system'
 import { telemetry } from '../../helper/telemetry.utils'
-import { pieceMetadataService } from '../../pieces/piece-metadata-service'
 import { platformService } from '../../platform/platform.service'
 import { userService } from '../../user/user-service'
 
-
 const secretManagerLicenseKeysRoute = 'https://secrets.activepieces.com/license-keys'
 
-const handleUnexpectedSecretsManagerError = (message: string) => {
-    logger.error(`[ERROR]: Unexpected error from secret manager: ${message}`)
+const handleUnexpectedSecretsManagerError = (log: FastifyBaseLogger, message: string) => {
+    log.error(`[ERROR]: Unexpected error from secret manager: ${message}`)
     throw new Error(message)
 }
 
-export const licenseKeysService = {
-    async requestTrial(request: CreateTrialLicenseKeyRequestBody): Promise<void> {
+export const licenseKeysService = (log: FastifyBaseLogger) => ({
+    async requestTrial(request: CreateTrialLicenseKeyRequestBody): Promise<LicenseKeyEntity> {
         const response = await fetch(secretManagerLicenseKeysRoute, {
             method: 'POST',
             headers: {
@@ -33,10 +32,12 @@ export const licenseKeysService = {
         }
         if (!response.ok) {
             const errorMessage = JSON.stringify(await response.json())
-            handleUnexpectedSecretsManagerError(errorMessage)
+            handleUnexpectedSecretsManagerError(log, errorMessage)
         }
+        const responseBody = await response.json()
+        return responseBody
     },
-    async markAsActiviated(request: { key: string, platformId: string }): Promise<void> {
+    async markAsActiviated(request: { key: string, platformId?: string }): Promise<void> {
         try {
             const response = await fetch(`${secretManagerLicenseKeysRoute}/activate`, {
                 method: 'POST',
@@ -53,15 +54,17 @@ export const licenseKeysService = {
             }
             if (!response.ok) {
                 const errorMessage = JSON.stringify(await response.json())
-                handleUnexpectedSecretsManagerError(errorMessage)
+                handleUnexpectedSecretsManagerError(log, errorMessage)
             }
-            rejectedPromiseHandler(telemetry.trackPlatform(request.platformId, {
-                name: TelemetryEventName.KEY_ACTIVIATED,
-                payload: {
-                    date: dayjs().toISOString(),
-                    key: request.key,
-                },
-            }))
+            if (request.platformId) {
+                rejectedPromiseHandler(telemetry(log).trackPlatform(request.platformId, {
+                    name: TelemetryEventName.KEY_ACTIVATED,
+                    payload: {
+                        date: dayjs().toISOString(),
+                        key: request.key,
+                    },
+                }), log)
+            }
         }
         catch (e) {
             // ignore
@@ -77,7 +80,7 @@ export const licenseKeysService = {
         }
         if (!response.ok) {
             const errorMessage = JSON.stringify(await response.json())
-            handleUnexpectedSecretsManagerError(errorMessage)
+            handleUnexpectedSecretsManagerError(log, errorMessage)
         }
         return response.json()
     },
@@ -90,19 +93,43 @@ export const licenseKeysService = {
         const isExpired = isNil(key) || dayjs(key.expiresAt).isBefore(dayjs())
         return isExpired ? null : key
     },
+    async extendTrial({ email, days }: { email: string, days: number }): Promise<void> {
+        const SECRET_MANAGER_API_KEY = system.getOrThrow(AppSystemProp.SECRET_MANAGER_API_KEY)
+        const response = await fetch(`${secretManagerLicenseKeysRoute}/extend-trial`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'api-key': SECRET_MANAGER_API_KEY,
+            },
+            body: JSON.stringify({ email, days }),
+        })
+
+        if (response.status === StatusCodes.NOT_FOUND) {
+            throw new ActivepiecesError({
+                code: ErrorCode.ENTITY_NOT_FOUND,
+                params: {
+                    message: 'License key not found',
+                },
+            })
+        }
+
+        if (!response.ok) {
+            const errorMessage = JSON.stringify(await response.json())
+            handleUnexpectedSecretsManagerError(log, errorMessage)
+        }
+    },
     async downgradeToFreePlan(platformId: string): Promise<void> {
         await platformService.update({
             id: platformId,
             ...turnedOffFeatures,
         })
         await deactivatePlatformUsersOtherThanAdmin(platformId)
-        await deletePrivatePieces(platformId)
     },
     async applyLimits(platformId: string, key: LicenseKeyEntity): Promise<void> {
         await platformService.update({
             id: platformId,
             ssoEnabled: key.ssoEnabled,
-            gitSyncEnabled: key.gitSyncEnabled,
+            environmentsEnabled: key.environmentsEnabled,
             showPoweredBy: key.showPoweredBy,
             embeddingEnabled: key.embeddingEnabled,
             auditLogEnabled: key.auditLogEnabled,
@@ -120,14 +147,13 @@ export const licenseKeysService = {
             analyticsEnabled: key.analyticsEnabled,
         })
     },
-}
+})
 
 const deactivatePlatformUsersOtherThanAdmin: (platformId: string) => Promise<void> = async (platformId: string) => {
     const { data } = await userService.list({
         platformId,
     })
     const users = data.filter(f => f.platformRole !== PlatformRole.ADMIN).map(u => {
-        logger.debug(`Deactivating user ${u.email}`)
         return userService.update({
             id: u.id,
             status: UserStatus.INACTIVE,
@@ -138,30 +164,10 @@ const deactivatePlatformUsersOtherThanAdmin: (platformId: string) => Promise<voi
     await Promise.all(users)
 }
 
-
-const deletePrivatePieces: (platformId: string) => Promise<void> = async (platformId: string) => {
-    const latestRelease = await flagService.getCurrentRelease()
-    const pieces = await pieceMetadataService.list({
-        edition: ApEdition.ENTERPRISE,
-        includeHidden: true,
-        release: latestRelease,
-        platformId,
-    })
-    const piecesToDelete = pieces.filter((piece) => piece.packageType === PackageType.ARCHIVE && piece.id).map((piece) =>
-        pieceMetadataService.delete({
-            id: piece.id!,
-            projectId: piece.projectId,
-        }),
-    )
-    await Promise.all(piecesToDelete)
-}
-
-
-
 const turnedOffFeatures: Omit<LicenseKeyEntity, 'id' | 'createdAt' | 'expiresAt' | 'activatedAt' | 'isTrial' | 'email' | 'customerName' | 'key'> = {
     ssoEnabled: false,
     analyticsEnabled: false,
-    gitSyncEnabled: false,
+    environmentsEnabled: false,
     showPoweredBy: false,
     embeddingEnabled: false,
     auditLogEnabled: false,

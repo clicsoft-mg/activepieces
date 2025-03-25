@@ -7,8 +7,7 @@ import {
 } from '@activepieces/pieces-framework';
 import { googleSheetsAuth } from '../..';
 import {
-  getAllGoogleSheetRows,
-  getGoogleSheetRows,
+  areSheetIdsValid,
   googleSheetsCommon,
 } from '../common/common';
 import { isNil } from '@activepieces/shared';
@@ -16,6 +15,7 @@ import { HttpError } from '@activepieces/pieces-common';
 import { z } from 'zod';
 import { propsValidation } from '@activepieces/pieces-common';
 import { getWorkSheetGridSize } from '../triggers/helpers';
+import { commonProps } from '../common/props';
 
 async function getRows(
   store: Store,
@@ -68,19 +68,21 @@ async function getRows(
 
   if (testing == false) await store.put(memKey, endRow, StoreScope.FLOW);
 
-  const row = await getGoogleSheetRows({
+  const row = await googleSheetsCommon.getGoogleSheetRows({
     accessToken: auth.access_token,
-    sheetName: sheetName,
-    spreadSheetId: spreadsheetId,
+    sheetId: sheetId,
+    spreadsheetId: spreadsheetId,
     rowIndex_s: startingRow,
     rowIndex_e: endRow - 1,
   });
 
   if (row.length == 0) {
-    const allRows = await getAllGoogleSheetRows({
+    const allRows = await googleSheetsCommon.getGoogleSheetRows({
+      spreadsheetId: spreadsheetId,
       accessToken: auth.access_token,
-      sheetName: sheetName,
-      spreadSheetId: spreadsheetId,
+      sheetId: sheetId,
+      rowIndex_s: undefined,
+      rowIndex_e: undefined,
     });
     const lastRow = allRows.length + 1;
     if (testing == false) await store.put(memKey, lastRow, StoreScope.FLOW);
@@ -101,9 +103,7 @@ export const getRowsAction = createAction({
   description: 'Get next group of rows from a Google Sheet',
   displayName: 'Get next row(s)',
   props: {
-    spreadsheet_id: googleSheetsCommon.spreadsheet_id,
-    include_team_drives: googleSheetsCommon.include_team_drives,
-    sheet_id: googleSheetsCommon.sheet_id,
+    ...commonProps,
     startRow: Property.Number({
       displayName: 'Start Row',
       description: 'Which row to start from?',
@@ -127,6 +127,12 @@ export const getRowsAction = createAction({
     }),
   },
   async run({ store, auth, propsValue }) {
+    const { startRow, groupSize, memKey ,spreadsheetId,sheetId} = propsValue;
+
+    if (!areSheetIdsValid(spreadsheetId, sheetId)) {
+			throw new Error('Please select a spreadsheet and sheet first.');
+		}
+
     await propsValidation.validateZod(propsValue, {
       startRow: z.number().min(1),
       groupSize: z.number().min(1),
@@ -136,11 +142,11 @@ export const getRowsAction = createAction({
       return await getRows(
         store,
         auth,
-        propsValue['spreadsheet_id'],
-        propsValue['sheet_id'],
-        propsValue['memKey'],
-        propsValue['groupSize'],
-        propsValue['startRow'],
+        spreadsheetId as string,
+        sheetId as number,
+        memKey,
+        groupSize,
+        startRow,
         false
       );
     } catch (error) {
@@ -152,15 +158,21 @@ export const getRowsAction = createAction({
     }
   },
   async test({ store, auth, propsValue }) {
+    const { startRow, groupSize, memKey ,spreadsheetId,sheetId} = propsValue;
+
+    if (!areSheetIdsValid(spreadsheetId, sheetId)) {
+			throw new Error('Please select a spreadsheet and sheet first.');
+		}
+
     try {
       return await getRows(
         store,
         auth,
-        propsValue['spreadsheet_id'],
-        propsValue['sheet_id'],
-        propsValue['memKey'],
-        propsValue['groupSize'],
-        propsValue['startRow'],
+        spreadsheetId as string,
+        sheetId as number,
+        memKey,
+        groupSize,
+        startRow,
         true
       );
     } catch (error) {

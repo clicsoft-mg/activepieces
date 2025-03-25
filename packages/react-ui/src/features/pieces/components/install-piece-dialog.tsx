@@ -1,4 +1,3 @@
-
 import { typeboxResolver } from '@hookform/resolvers/typebox';
 import { Static, Type } from '@sinclair/typebox';
 import { useMutation } from '@tanstack/react-query';
@@ -36,6 +35,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/components/ui/use-toast';
 import { flagsHooks } from '@/hooks/flags-hooks';
+import { platformHooks } from '@/hooks/platform-hooks';
 import { api } from '@/lib/api';
 import {
   AddPieceRequestBody,
@@ -45,7 +45,6 @@ import {
 } from '@activepieces/shared';
 
 import { piecesApi } from '../lib/pieces-api';
-
 const FormSchema = Type.Object(
   {
     packageType: Type.Enum(PackageType),
@@ -69,6 +68,8 @@ const InstallPieceDialog = ({
   onInstallPiece,
   scope,
 }: InstallPieceDialogProps) => {
+  const { platform } = platformHooks.useCurrentPlatform();
+  const isEnabled = platform.managePiecesEnabled;
   const [isOpen, setIsOpen] = useState(false);
 
   const { data: privatePiecesEnabled } = flagsHooks.useFlag<boolean>(
@@ -152,7 +153,9 @@ const InstallPieceDialog = ({
         switch (error.response?.status) {
           case HttpStatusCode.Conflict:
             form.setError('root.serverError', {
-              message: t('Piece already installed.'),
+              message: t(
+                'A piece with this name and version is already installed. Please update the version number in package.json and try again.',
+              ),
             });
             break;
           default:
@@ -219,11 +222,12 @@ const InstallPieceDialog = ({
                         <SelectItem value={PackageType.REGISTRY}>
                           {t('NPM Registry')}
                         </SelectItem>
-                        {privatePiecesEnabled && (
-                          <SelectItem value={PackageType.ARCHIVE}>
-                            {t('Packed Archive (.tgz)')}
-                          </SelectItem>
-                        )}
+                        <SelectItem
+                          value={PackageType.ARCHIVE}
+                          disabled={!isEnabled || !privatePiecesEnabled}
+                        >
+                          {t('Packed Archive (.tgz)')}
+                        </SelectItem>
                       </SelectGroup>
                     </SelectContent>
                   </Select>

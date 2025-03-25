@@ -1,5 +1,14 @@
 import { useMutation } from '@tanstack/react-query';
-import { createContext, useContext } from 'react';
+import { useReactFlow } from '@xyflow/react';
+import {
+  createContext,
+  useContext,
+  useCallback,
+  useState,
+  useEffect,
+  useRef,
+} from 'react';
+import { usePrevious } from 'react-use';
 import { create, useStore } from 'zustand';
 
 import { INTERNAL_ERROR_TOAST, toast } from '@/components/ui/use-toast';
@@ -7,6 +16,7 @@ import { flowsApi } from '@/features/flows/lib/flows-api';
 import { PromiseQueue } from '@/lib/promise-queue';
 import {
   FlowOperationRequest,
+  FlowOperationType,
   FlowRun,
   FlowVersion,
   FlowVersionState,
@@ -16,10 +26,29 @@ import {
   flowOperations,
   flowStructureUtil,
   isNil,
+  StepLocationRelativeToParent,
+  Action,
+  isFlowStateTerminal,
 } from '@activepieces/shared';
 
 import { flowRunUtils } from '../../features/flow-runs/lib/flow-run-utils';
+import { AskAiButtonOperations } from '../../features/pieces/lib/types';
 import { useAuthorization } from '../../hooks/authorization-hooks';
+
+import {
+  copySelectedNodes,
+  deleteSelectedNodes,
+  getActionsInClipboard,
+  pasteNodes,
+  toggleSkipSelectedNodes,
+} from './flow-canvas/bulk-actions';
+import {
+  CanvasShortcuts,
+  CanvasShortcutsProps,
+} from './flow-canvas/context-menu/canvas-context-menu';
+import { STEP_CONTEXT_MENU_ATTRIBUTE } from './flow-canvas/utils/consts';
+import { flowCanvasUtils } from './flow-canvas/utils/flow-canvas-utils';
+import { textMentionUtils } from './piece-properties/text-input-with-mentions/text-input-utils';
 
 const flowUpdatesQueue = new PromiseQueue();
 
@@ -53,6 +82,7 @@ export type BuilderState = {
   flowVersion: FlowVersion;
   readonly: boolean;
   sampleData: Record<string, unknown>;
+  sampleDataInput: Record<string, unknown>;
   loopsIndexes: Record<string, number>;
   run: FlowRun | null;
   leftSidebar: LeftSideBarType;
@@ -60,9 +90,9 @@ export type BuilderState = {
   selectedStep: string | null;
   canExitRun: boolean;
   activeDraggingStep: string | null;
-  allowCanvasPanning: boolean;
   saving: boolean;
-  refreshPieceFormSettings: boolean;
+  /** change this value to trigger the step form to set its values from the step */
+  refreshStepFormSettingsToggle: boolean;
   selectedBranchIndex: number | null;
   refreshSettings: () => void;
   setSelectedBranchIndex: (index: number | null) => void;
@@ -73,17 +103,14 @@ export type BuilderState = {
   setRun: (run: FlowRun, flowVersion: FlowVersion) => void;
   setLeftSidebar: (leftSidebar: LeftSideBarType) => void;
   setRightSidebar: (rightSidebar: RightSideBarType) => void;
-  applyOperation: (
-    operation: FlowOperationRequest,
-    onError: () => void,
-  ) => void;
+  applyOperation: (operation: FlowOperationRequest) => void;
   removeStepSelection: () => void;
   selectStepByName: (stepName: string) => void;
   startSaving: () => void;
-  setAllowCanvasPanning: (allowCanvasPanning: boolean) => void;
   setActiveDraggingStep: (stepName: string | null) => void;
   setFlow: (flow: PopulatedFlow) => void;
   setSampleData: (stepName: string, payload: unknown) => void;
+  setSampleDataInput: (stepName: string, payload: unknown) => void;
   exitPieceSelector: () => void;
   setVersion: (flowVersion: FlowVersion) => void;
   insertMention: InsertMentionHandler | null;
@@ -105,11 +132,29 @@ export type BuilderState = {
       operation: FlowOperationRequest,
     ) => void,
   ) => void;
+  askAiButtonProps: AskAiButtonOperations | null;
+  setAskAiButtonProps: (props: AskAiButtonOperations | null) => void;
+  selectedNodes: string[];
+  setSelectedNodes: (nodes: string[]) => void;
+  panningMode: 'grab' | 'pan';
+  setPanningMode: (mode: 'grab' | 'pan') => void;
+  pieceSelectorStep: string | null;
+  setPieceSelectorStep: (step: string | null) => void;
+  isFocusInsideListMapperModeInput: boolean;
+  setIsFocusInsideListMapperModeInput: (
+    isFocusInsideListMapperModeInput: boolean,
+  ) => void;
 };
-
+const DEFAULT_PANNING_MODE_KEY_IN_LOCAL_STORAGE = 'defaultPanningMode';
 export type BuilderInitialState = Pick<
   BuilderState,
-  'flow' | 'flowVersion' | 'readonly' | 'run' | 'canExitRun' | 'sampleData'
+  | 'flow'
+  | 'flowVersion'
+  | 'readonly'
+  | 'run'
+  | 'canExitRun'
+  | 'sampleData'
+  | 'sampleDataInput'
 >;
 
 export type BuilderStore = ReturnType<typeof createBuilderStore>;
@@ -130,15 +175,21 @@ function determineInitiallySelectedStep(
   );
 }
 
-export const createBuilderStore = (initialState: BuilderInitialState) =>
+export const createBuilderStore = (
+  initialState: BuilderInitialState,
+  newFlow: boolean,
+) =>
   create<BuilderState>((set) => {
     const failedStepInRun = initialState.run?.steps
       ? flowRunUtils.findFailedStepInOutput(initialState.run.steps)
       : null;
-    const initiallySelectedStep = determineInitiallySelectedStep(
-      failedStepInRun,
-      initialState.flowVersion,
-    );
+    const initiallySelectedStep = newFlow
+      ? null
+      : determineInitiallySelectedStep(
+          failedStepInRun,
+          initialState.flowVersion,
+        );
+
     return {
       loopsIndexes:
         initialState.run && initialState.run.steps
@@ -149,6 +200,7 @@ export const createBuilderStore = (initialState: BuilderInitialState) =>
             )
           : {},
       sampleData: initialState.sampleData,
+      sampleDataInput: initialState.sampleDataInput,
       flow: initialState.flow,
       flowVersion: initialState.flowVersion,
       leftSidebar: initialState.run
@@ -160,14 +212,13 @@ export const createBuilderStore = (initialState: BuilderInitialState) =>
       selectedStep: initiallySelectedStep,
       canExitRun: initialState.canExitRun,
       activeDraggingStep: null,
-      allowCanvasPanning: true,
       rightSidebar:
         initiallySelectedStep &&
         (initiallySelectedStep !== 'trigger' ||
           initialState.flowVersion.trigger.type !== TriggerType.EMPTY)
           ? RightSideBarType.PIECE_SETTINGS
           : RightSideBarType.NONE,
-      refreshPieceFormSettings: false,
+      refreshStepFormSettingsToggle: false,
 
       removeStepSelection: () =>
         set({
@@ -175,10 +226,7 @@ export const createBuilderStore = (initialState: BuilderInitialState) =>
           rightSidebar: RightSideBarType.NONE,
           selectedBranchIndex: null,
         }),
-      setAllowCanvasPanning: (allowCanvasPanning: boolean) =>
-        set({
-          allowCanvasPanning,
-        }),
+
       setActiveDraggingStep: (stepName: string | null) =>
         set({
           activeDraggingStep: stepName,
@@ -198,19 +246,33 @@ export const createBuilderStore = (initialState: BuilderInitialState) =>
           };
         });
       },
-      selectStepByName: (stepName: string) => {
+      selectStepByName: (selectedStep: string) => {
         set((state) => {
+          if (selectedStep === state.selectedStep) {
+            return state;
+          }
+          const selectedNodes =
+            isNil(selectedStep) || selectedStep === 'trigger'
+              ? []
+              : [selectedStep];
+
+          const rightSidebar =
+            selectedStep === 'trigger' &&
+            state.flowVersion.trigger.type === TriggerType.EMPTY
+              ? RightSideBarType.NONE
+              : RightSideBarType.PIECE_SETTINGS;
+
+          const leftSidebar = !isNil(state.run)
+            ? LeftSideBarType.RUN_DETAILS
+            : LeftSideBarType.NONE;
+
           return {
-            selectedStep: stepName,
-            rightSidebar:
-              stepName === 'trigger' &&
-              state.flowVersion.trigger.type === TriggerType.EMPTY
-                ? RightSideBarType.NONE
-                : RightSideBarType.PIECE_SETTINGS,
-            leftSidebar: !isNil(state.run)
-              ? LeftSideBarType.RUN_DETAILS
-              : LeftSideBarType.NONE,
+            selectedStep,
+            rightSidebar,
+            leftSidebar,
             selectedBranchIndex: null,
+            askAiButtonProps: null,
+            selectedNodes,
           };
         });
       },
@@ -234,6 +296,15 @@ export const createBuilderStore = (initialState: BuilderInitialState) =>
             },
           };
         }),
+      setSampleDataInput: (stepName: string, payload: unknown) =>
+        set((state) => {
+          return {
+            sampleDataInput: {
+              ...state.sampleDataInput,
+              [stepName]: payload,
+            },
+          };
+        }),
       exitRun: (userHasPermissionToEditFlow: boolean) =>
         set({
           run: null,
@@ -244,11 +315,16 @@ export const createBuilderStore = (initialState: BuilderInitialState) =>
           selectedBranchIndex: null,
         }),
       exitStepSettings: () =>
-        set({
+        set((state) => ({
           rightSidebar: RightSideBarType.NONE,
+          leftSidebar:
+            state.leftSidebar === LeftSideBarType.AI_COPILOT
+              ? LeftSideBarType.NONE
+              : state.leftSidebar,
           selectedStep: null,
           selectedBranchIndex: null,
-        }),
+          askAiButtonProps: null,
+        })),
       exitPieceSelector: () =>
         set({
           rightSidebar: RightSideBarType.NONE,
@@ -256,7 +332,8 @@ export const createBuilderStore = (initialState: BuilderInitialState) =>
         }),
       setRightSidebar: (rightSidebar: RightSideBarType) =>
         set({ rightSidebar }),
-      setLeftSidebar: (leftSidebar: LeftSideBarType) => set({ leftSidebar }),
+      setLeftSidebar: (leftSidebar: LeftSideBarType) =>
+        set({ leftSidebar, askAiButtonProps: null }),
       setRun: async (run: FlowRun, flowVersion: FlowVersion) =>
         set((state) => {
           return {
@@ -288,7 +365,7 @@ export const createBuilderStore = (initialState: BuilderInitialState) =>
           };
         });
       },
-      applyOperation: (operation: FlowOperationRequest, onError: () => void) =>
+      applyOperation: (operation: FlowOperationRequest) =>
         set((state) => {
           if (state.readonly) {
             console.warn('Cannot apply operation while readonly');
@@ -309,6 +386,7 @@ export const createBuilderStore = (initialState: BuilderInitialState) =>
               const updatedFlowVersion = await flowsApi.update(
                 state.flow.id,
                 operation,
+                true,
               );
               set((state) => {
                 return {
@@ -323,7 +401,6 @@ export const createBuilderStore = (initialState: BuilderInitialState) =>
             } catch (error) {
               console.error(error);
               flowUpdatesQueue.halt();
-              onError();
             }
           };
           flowUpdatesQueue.add(updateRequest);
@@ -348,8 +425,9 @@ export const createBuilderStore = (initialState: BuilderInitialState) =>
       },
       refreshSettings: () =>
         set((state) => ({
-          refreshPieceFormSettings: !state.refreshPieceFormSettings,
+          refreshStepFormSettingsToggle: !state.refreshStepFormSettingsToggle,
         })),
+
       selectedBranchIndex: null,
       operationListeners: [],
       addOperationListener: (
@@ -372,15 +450,224 @@ export const createBuilderStore = (initialState: BuilderInitialState) =>
             (l) => l !== listener,
           ),
         })),
+      askAiButtonProps: null,
+      setAskAiButtonProps: (props) => {
+        return set((state) => {
+          let leftSidebar = state.leftSidebar;
+          if (props) {
+            leftSidebar = LeftSideBarType.AI_COPILOT;
+          } else if (state.leftSidebar === LeftSideBarType.AI_COPILOT) {
+            leftSidebar = LeftSideBarType.NONE;
+          }
+
+          let rightSidebar = state.rightSidebar;
+          if (props && props.type === FlowOperationType.UPDATE_ACTION) {
+            rightSidebar = RightSideBarType.PIECE_SETTINGS;
+          } else if (props) {
+            rightSidebar = RightSideBarType.NONE;
+          }
+
+          let selectedStep = state.selectedStep;
+          if (props && props.type === FlowOperationType.UPDATE_ACTION) {
+            selectedStep = props.stepName;
+          } else if (props) {
+            selectedStep = null;
+          }
+
+          return {
+            askAiButtonProps: props,
+            leftSidebar,
+            rightSidebar,
+            selectedStep,
+          };
+        });
+      },
+      selectedNodes: [],
+      setSelectedNodes: (nodes) => {
+        return set(() => ({
+          selectedNodes: nodes,
+        }));
+      },
+      panningMode: getPanningModeFromLocalStorage(),
+      setPanningMode: (mode: 'grab' | 'pan') => {
+        localStorage.setItem(DEFAULT_PANNING_MODE_KEY_IN_LOCAL_STORAGE, mode);
+        return set(() => ({
+          panningMode: mode,
+        }));
+      },
+      pieceSelectorStep: null,
+      setPieceSelectorStep: (step: string | null) => {
+        return set((state) => {
+          return {
+            pieceSelectorStep: step,
+            selectedStep: step ? step : state.selectedStep,
+            rightSidebar:
+              (step && step !== 'trigger') ||
+              state.flowVersion.trigger.type !== TriggerType.EMPTY
+                ? RightSideBarType.PIECE_SETTINGS
+                : state.rightSidebar,
+          };
+        });
+      },
+      isFocusInsideListMapperModeInput: false,
+      setIsFocusInsideListMapperModeInput: (
+        isFocusInsideListMapperModeInput: boolean,
+      ) => {
+        return set(() => ({
+          isFocusInsideListMapperModeInput,
+        }));
+      },
     };
   });
 
-export const useSwitchToDraft = () => {
-  const [flowVersion, setVersion, exitRun] = useBuilderStateContext((state) => [
+export function getPanningModeFromLocalStorage(): 'grab' | 'pan' {
+  return localStorage.getItem(DEFAULT_PANNING_MODE_KEY_IN_LOCAL_STORAGE) ===
+    'grab'
+    ? 'grab'
+    : 'pan';
+}
+
+const shortcutHandler = (
+  event: KeyboardEvent,
+  handlers: Record<keyof CanvasShortcutsProps, () => void>,
+) => {
+  const shortcutActivated = Object.entries(CanvasShortcuts).find(
+    ([_, shortcut]) =>
+      shortcut.shortcutKey?.toLowerCase() === event.key.toLowerCase() &&
+      !!(
+        shortcut.withCtrl === event.ctrlKey ||
+        shortcut.withCtrl === event.metaKey
+      ) &&
+      !!shortcut.withShift === event.shiftKey,
+  );
+  if (shortcutActivated) {
+    if (
+      isNil(shortcutActivated[1].shouldNotPreventDefault) ||
+      !shortcutActivated[1].shouldNotPreventDefault
+    ) {
+      event.preventDefault();
+    }
+    event.stopPropagation();
+    handlers[shortcutActivated[0] as keyof CanvasShortcutsProps]();
+  }
+};
+
+export const NODE_SELECTION_RECT_CLASS_NAME = 'react-flow__nodesselection-rect';
+export const doesSelectionRectangleExist = () => {
+  return document.querySelector(`.${NODE_SELECTION_RECT_CLASS_NAME}`) !== null;
+};
+export const useHandleKeyPressOnCanvas = () => {
+  const [
+    selectedNodes,
+    flowVersion,
+    selectedStep,
+    exitStepSettings,
+    applyOperation,
+    readonly,
+  ] = useBuilderStateContext((state) => [
+    state.selectedNodes,
     state.flowVersion,
-    state.setVersion,
-    state.exitRun,
+    state.selectedStep,
+    state.exitStepSettings,
+    state.applyOperation,
+    state.readonly,
   ]);
+
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLElement &&
+        (e.target === document.body ||
+          e.target.classList.contains('react-flow__nodesselection-rect') ||
+          e.target.closest(`[data-${STEP_CONTEXT_MENU_ATTRIBUTE}]`)) &&
+        !readonly
+      ) {
+        const selectedNodesWithoutTrigger = selectedNodes.filter(
+          (node) => node !== flowVersion.trigger.name,
+        );
+        shortcutHandler(e, {
+          Copy: () => {
+            if (
+              selectedNodesWithoutTrigger.length > 0 &&
+              document.getSelection()?.toString() === ''
+            ) {
+              copySelectedNodes({
+                selectedNodes: selectedNodesWithoutTrigger,
+                flowVersion,
+              });
+            }
+          },
+          Delete: () => {
+            if (selectedNodes.length > 0) {
+              deleteSelectedNodes({
+                exitStepSettings,
+                selectedStep,
+                selectedNodes,
+                applyOperation,
+              });
+            }
+          },
+          Skip: () => {
+            if (selectedNodesWithoutTrigger.length > 0) {
+              toggleSkipSelectedNodes({
+                selectedNodes: selectedNodesWithoutTrigger,
+                flowVersion,
+                applyOperation,
+              });
+            }
+          },
+          Paste: () => {
+            getActionsInClipboard().then((actions) => {
+              if (actions.length > 0) {
+                const lastStep = [
+                  flowVersion.trigger,
+                  ...flowStructureUtil.getAllNextActionsWithoutChildren(
+                    flowVersion.trigger,
+                  ),
+                ].at(-1)!.name;
+                const lastSelectedNode =
+                  selectedNodes.length === 1 ? selectedNodes[0] : null;
+                pasteNodes(
+                  actions,
+                  flowVersion,
+                  {
+                    parentStepName: lastSelectedNode ?? lastStep,
+                    stepLocationRelativeToParent:
+                      StepLocationRelativeToParent.AFTER,
+                  },
+                  applyOperation,
+                );
+              }
+            });
+          },
+        });
+      }
+    },
+    [
+      selectedNodes,
+      flowVersion,
+      applyOperation,
+      selectedStep,
+      exitStepSettings,
+      readonly,
+    ],
+  );
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+};
+
+export const useSwitchToDraft = () => {
+  const [flowVersion, setVersion, exitRun, setFlow] = useBuilderStateContext(
+    (state) => [
+      state.flowVersion,
+      state.setVersion,
+      state.exitRun,
+      state.setFlow,
+    ],
+  );
   const { checkAccess } = useAuthorization();
   const userHasPermissionToEditFlow = checkAccess(Permission.WRITE_FLOW);
   const { mutate: switchToDraft, isPending: isSwitchingToDraftPending } =
@@ -390,6 +677,7 @@ export const useSwitchToDraft = () => {
         return flow;
       },
       onSuccess: (flow) => {
+        setFlow(flow);
         setVersion(flow.version);
         exitRun(userHasPermissionToEditFlow);
       },
@@ -401,4 +689,109 @@ export const useSwitchToDraft = () => {
     switchToDraft,
     isSwitchingToDraftPending,
   };
+};
+
+export const usePasteActionsInClipboard = () => {
+  const [actionsToPaste, setActionsToPaste] = useState<Action[]>([]);
+  const fetchClipboardOperations = async () => {
+    if (document.hasFocus()) {
+      const fetchedActionsFromClipboard = await getActionsInClipboard();
+      if (fetchedActionsFromClipboard.length > 0) {
+        setActionsToPaste(fetchedActionsFromClipboard);
+      } else {
+        setActionsToPaste([]);
+      }
+    }
+  };
+  return { actionsToPaste, fetchClipboardOperations };
+};
+
+export const useIsFocusInsideListMapperModeInput = ({
+  containerRef,
+  setIsFocusInsideListMapperModeInput,
+  isFocusInsideListMapperModeInput,
+}: {
+  containerRef: React.RefObject<HTMLDivElement>;
+  setIsFocusInsideListMapperModeInput: (
+    isFocusInsideListMapperModeInput: boolean,
+  ) => void;
+  isFocusInsideListMapperModeInput: boolean;
+}) => {
+  useEffect(() => {
+    const focusInListener = () => {
+      const focusedElement = document.activeElement;
+      const isFocusedInside = !!containerRef.current?.contains(focusedElement);
+      const isFocusedInsideDataSelector =
+        !isNil(document.activeElement) &&
+        document.activeElement instanceof HTMLElement &&
+        textMentionUtils.isDataSelectorOrChildOfDataSelector(
+          document.activeElement,
+        );
+      setIsFocusInsideListMapperModeInput(
+        isFocusedInside ||
+          (isFocusedInsideDataSelector && isFocusInsideListMapperModeInput),
+      );
+    };
+    document.addEventListener('focusin', focusInListener);
+    return () => {
+      document.removeEventListener('focusin', focusInListener);
+    };
+  }, [setIsFocusInsideListMapperModeInput, isFocusInsideListMapperModeInput]);
+};
+export const useFocusedFailedStep = () => {
+  const currentRun = useBuilderStateContext((state) => state.run);
+  const previousRun = usePrevious(currentRun);
+  const { fitView } = useReactFlow();
+  if (
+    (currentRun &&
+      previousRun?.id !== currentRun.id &&
+      isFlowStateTerminal(currentRun.status)) ||
+    (currentRun &&
+      previousRun &&
+      !isFlowStateTerminal(previousRun.status) &&
+      isFlowStateTerminal(currentRun.status))
+  ) {
+    const failedStep = currentRun.steps
+      ? flowRunUtils.findFailedStepInOutput(currentRun.steps)
+      : null;
+    if (failedStep) {
+      setTimeout(() => {
+        fitView(flowCanvasUtils.createFocusStepInGraphParams(failedStep));
+      });
+    }
+  }
+};
+
+export const useResizeCanvas = (
+  containerRef: React.RefObject<HTMLDivElement>,
+  setHasCanvasBeenInitialised: (hasCanvasBeenInitialised: boolean) => void,
+) => {
+  const containerSizeRef = useRef({
+    width: 0,
+    height: 0,
+  });
+  const { getViewport, setViewport } = useReactFlow();
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const resizeObserver = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      setHasCanvasBeenInitialised(true);
+      const { x, y, zoom } = getViewport();
+      if (containerRef.current && width !== containerSizeRef.current.width) {
+        const newX = x + (width - containerSizeRef.current.width) / 2;
+        // Update the viewport to keep content centered without affecting zoom
+        setViewport({ x: newX, y, zoom });
+      }
+      // Adjust x/y values based on the new size and keep the same zoom level
+      containerSizeRef.current = {
+        width,
+        height,
+      };
+    });
+    resizeObserver.observe(containerRef.current);
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [setViewport, getViewport]);
 };

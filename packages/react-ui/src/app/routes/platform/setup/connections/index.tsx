@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ColumnDef } from '@tanstack/react-table';
 import { t } from 'i18next';
-import { CheckIcon, Trash, Pencil } from 'lucide-react';
+import { CheckIcon, Trash, Pencil, Globe } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
@@ -221,24 +221,23 @@ const GlobalConnectionsTable = () => {
         return (
           <div className="flex items-center gap-2 justify-end">
             <Tooltip>
-              <TooltipTrigger asChild>
-                <EditGlobalConnectionDialog
-                  connectionId={row.original.id}
-                  currentName={row.original.displayName}
-                  projectIds={row.original.projectIds}
-                  onEdit={() => {
-                    refetch();
-                  }}
-                >
+              <EditGlobalConnectionDialog
+                connectionId={row.original.id}
+                currentName={row.original.displayName}
+                projectIds={row.original.projectIds}
+                onEdit={() => {
+                  refetch();
+                }}
+              >
+                <TooltipTrigger asChild>
                   <Button variant="ghost" size="sm">
                     <Pencil className="h-4 w-4" />
                   </Button>
-                </EditGlobalConnectionDialog>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{t('Rename Connection')}</p>
-              </TooltipContent>
+                </TooltipTrigger>
+              </EditGlobalConnectionDialog>
+              <TooltipContent>{t('Edit')}</TooltipContent>
             </Tooltip>
+
             <ReconnectButtonDialog
               connection={row.original}
               onConnectionCreated={() => {
@@ -370,6 +369,11 @@ const GlobalConnectionsTable = () => {
           {t('Global Connections')}
         </TableTitle>
         <DataTable
+          emptyStateTextTitle={t('No global connections found')}
+          emptyStateTextDescription={t(
+            'Create a global connection that can be shared to multiple projects',
+          )}
+          emptyStateIcon={<Globe className="size-14" />}
           columns={columns}
           page={data}
           isLoading={isLoading}

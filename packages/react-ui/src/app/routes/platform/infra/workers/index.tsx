@@ -12,9 +12,9 @@ import { workersApi } from '@/features/platform-admin-panel/lib/workers-api';
 import { flagsHooks } from '@/hooks/flags-hooks';
 import { cn, useTimeAgo } from '@/lib/utils';
 import {
+  ApEdition,
   ApFlagId,
   WorkerMachineStatus,
-  WorkerMachineType,
   WorkerMachineWithStatus,
 } from '@activepieces/shared';
 
@@ -25,8 +25,6 @@ const DEMO_WORKERS_DATA: WorkerMachineWithStatus[] = [
     id: 'hbAcAzqbOEQLzvIi6PMCF',
     created: '2024-11-23T18:51:30.000Z',
     updated: dayjs().subtract(10, 'seconds').toISOString(),
-    platformId: 'demo-platform',
-    type: WorkerMachineType.DEDICATED,
     information: {
       diskInfo: {
         total: 337374281728,
@@ -50,8 +48,6 @@ const DEMO_WORKERS_DATA: WorkerMachineWithStatus[] = [
     id: 'kpMnBxRtYuWvZsQi9NLCJ',
     created: '2024-11-23T19:12:45.000Z',
     updated: dayjs().subtract(1, 'minute').toISOString(),
-    platformId: 'demo-platform',
-    type: WorkerMachineType.DEDICATED,
     information: {
       diskInfo: {
         total: 536870912000,
@@ -74,22 +70,23 @@ const DEMO_WORKERS_DATA: WorkerMachineWithStatus[] = [
 ];
 
 export default function WorkersPage() {
-  const { data: showPlatformDemo } = flagsHooks.useFlag<boolean>(
-    ApFlagId.SHOW_PLATFORM_DEMO,
-  );
+  const { data: edition } = flagsHooks.useFlag<ApEdition>(ApFlagId.EDITION);
+  const showDemoData = edition === ApEdition.CLOUD;
   const { data: workersData, isLoading } = useQuery<WorkerMachineWithStatus[]>({
     queryKey: ['worker-machines'],
     staleTime: 0,
     gcTime: 0,
     refetchInterval: 5000,
     queryFn: async () =>
-      showPlatformDemo ? DEMO_WORKERS_DATA : await workersApi.list(),
+      showDemoData ? DEMO_WORKERS_DATA : await workersApi.list(),
   });
 
   return (
-    <div className="flex flex-col w-full">
-      <TableTitle>{t('Workers')}</TableTitle>
-      {showPlatformDemo && (
+    <div className="flex flex-col w-full gap-4">
+      <TableTitle description={t('Check the health of your worker machines')}>
+        {t('Workers Machine')}
+      </TableTitle>
+      {showDemoData && (
         <Alert variant="default" className="mt-4">
           <div className="flex items-center gap-2">
             <InfoIcon size={16} />
@@ -102,6 +99,11 @@ export default function WorkersPage() {
         </Alert>
       )}
       <DataTable
+        emptyStateTextTitle={t('No workers found')}
+        emptyStateTextDescription={t(
+          "You don't have any worker machines yet. Spin up new machines to execute your automations",
+        )}
+        emptyStateIcon={<Server className="size-14" />}
         hidePagination={true}
         columns={[
           {
@@ -217,6 +219,19 @@ export default function WorkersPage() {
               // eslint-disable-next-line react-hooks/rules-of-hooks
               const timeAgo = useTimeAgo(new Date(row.original.updated));
               return <div className="text-start">{timeAgo}</div>;
+            },
+          },
+          {
+            accessorKey: 'version',
+            header: ({ column }) => (
+              <DataTableColumnHeader column={column} title={t('Version')} />
+            ),
+            cell: ({ row }) => {
+              return (
+                <div className="text-start">
+                  {row.original.information.workerProps.version ?? ' <= 0.39.4'}
+                </div>
+              );
             },
           },
         ]}

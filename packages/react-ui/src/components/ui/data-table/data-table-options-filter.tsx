@@ -3,10 +3,12 @@ import * as React from 'react';
 import { DateRange } from 'react-day-picker';
 import { useSearchParams } from 'react-router-dom';
 
-import { DatePickerWithRange } from '../date-picker-range';
+import { DateTimePickerWithRange } from '../date-time-picker-range';
 
 import { DataTableInputPopover } from './data-table-input-popover';
 import { DataTableSelectPopover } from './data-table-select-popover';
+
+import { CURSOR_QUERY_PARAM } from '.';
 
 interface DataTableFacetedFilterProps<TData, TValue> {
   type: 'select' | 'input' | 'date';
@@ -36,7 +38,7 @@ export function DataTableFacetedFilter<TData, TValue>({
           newParams.delete(column?.id as string);
           newParams.delete(`${column?.id}After`);
           newParams.delete(`${column?.id}Before`);
-
+          newParams.delete(CURSOR_QUERY_PARAM);
           if (!filterValue) {
             return newParams;
           }
@@ -82,7 +84,7 @@ export function DataTableFacetedFilter<TData, TValue>({
 
   switch (type) {
     case 'input': {
-      const filterValue = (column?.getFilterValue() || '') as string;
+      const filterValue = searchParams.get(column?.id as string) || '';
       return (
         <DataTableInputPopover
           title={title}
@@ -92,7 +94,7 @@ export function DataTableFacetedFilter<TData, TValue>({
       );
     }
     case 'select': {
-      const filterValue = column?.getFilterValue() as string[];
+      const filterValue = searchParams.getAll(column?.id as string) as string[];
       const selectedValues = new Set(filterValue);
       return (
         <DataTableSelectPopover
@@ -109,7 +111,7 @@ export function DataTableFacetedFilter<TData, TValue>({
       const to = searchParams.get(`${column?.id}Before`);
 
       return (
-        <DatePickerWithRange
+        <DateTimePickerWithRange
           presetType="past"
           onChange={handleFilterChange}
           from={from ?? undefined}

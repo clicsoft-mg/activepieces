@@ -41,7 +41,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -56,7 +62,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -71,7 +83,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -86,7 +104,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -101,7 +125,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -116,7 +146,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -131,7 +167,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -146,7 +188,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -161,7 +209,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -176,7 +230,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -191,7 +251,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -206,7 +272,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -221,7 +293,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -236,7 +314,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -251,7 +335,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -266,7 +356,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -279,7 +375,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -292,7 +394,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -305,7 +413,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -318,7 +432,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -332,7 +452,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -346,7 +472,13 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
@@ -360,8 +492,30 @@ describe('flow with branching different  branches', () => {
         )
         expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
         expect(result.steps.router.output).toEqual({
-            branches: [true],
+            branches: [
+                {
+                    branchIndex: 1,
+                    branchName: 'Test Branch',
+                    evaluation: true,
+                },
+            ],
         })
     })
 
+    it('should skip router', async () => {
+        const result = await flowExecutor.execute({
+            action: buildRouterWithOneCondition({ children: [
+                buildCodeAction({ name: 'echo_step', input: {}, skip: true }),
+            ], conditions: [
+                {
+                    operator: BranchOperator.TEXT_EXACTLY_MATCHES,
+                    firstValue: 'test',
+                    secondValue: 'test',
+                    caseSensitive: false,
+                },
+            ], executionType: RouterExecutionType.EXECUTE_FIRST_MATCH, skip: true }), executionState: FlowExecutorContext.empty(), constants: generateMockEngineConstants(),
+        })
+        expect(result.verdict).toBe(ExecutionVerdict.RUNNING)
+        expect(result.steps.router).toBeUndefined()
+    })
 })

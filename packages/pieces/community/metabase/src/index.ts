@@ -4,6 +4,8 @@ import {
   Property,
 } from '@activepieces/pieces-framework';
 import { getQuestion } from './lib/actions/get-question';
+import { getQuestionPngPreview } from './lib/actions/get-png-rendering';
+import { getDashboardQuestions } from './lib/actions/get-dashboard';
 import { queryMetabaseApi } from './lib/common';
 import { HttpMethod } from '@activepieces/pieces-common';
 
@@ -50,7 +52,7 @@ export const metabase = createPiece({
   auth: metabaseAuth,
   minimumSupportedRelease: '0.30.0',
   logoUrl: 'https://cdn.activepieces.com/pieces/metabase.png',
-  authors: ['AdamSelene', 'abuaboud'],
-  actions: [getQuestion],
+  authors: ['AdamSelene', 'abuaboud', 'valentin-mourtialon'],
+  actions: [getQuestion, getQuestionPngPreview, getDashboardQuestions],
   triggers: [],
 });

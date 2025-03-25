@@ -1,11 +1,13 @@
 import { t } from 'i18next';
 
+import { toast } from '@/components/ui/use-toast';
 import { api } from '@/lib/api';
 import {
-  DropdownState,
   PieceMetadataModel,
   PieceMetadataModelSummary,
-  PiecePropertyMap,
+  PropertyType,
+  ExecutePropsResult,
+  InputPropertyMap,
 } from '@activepieces/pieces-framework';
 import {
   Action,
@@ -16,6 +18,7 @@ import {
   ListPiecesRequestQuery,
   PackageType,
   PieceOptionRequest,
+  spreadIfDefined,
   Trigger,
   TriggerType,
 } from '@activepieces/shared';
@@ -63,10 +66,48 @@ export const piecesApi = {
       version: request.version ?? undefined,
     });
   },
-  options<T extends DropdownState<unknown> | PiecePropertyMap>(
+  options<
+    T extends
+      | PropertyType.DROPDOWN
+      | PropertyType.MULTI_SELECT_DROPDOWN
+      | PropertyType.DYNAMIC,
+  >(
     request: PieceOptionRequest,
-  ): Promise<T> {
-    return api.post<T>(`/v1/pieces/options`, request);
+    propertyType: T,
+  ): Promise<ExecutePropsResult<T>> {
+    return api
+      .post<ExecutePropsResult<T>>(`/v1/pieces/options`, request)
+      .catch((error) => {
+        console.error(error);
+        toast({
+          title: t('Error'),
+          description: t(
+            'An internal error occurred while fetching data, please contact support',
+          ),
+          variant: 'destructive',
+        });
+        const defaultStateForDynamicProperty: ExecutePropsResult<PropertyType.DYNAMIC> =
+          {
+            options: {} as InputPropertyMap,
+            type: PropertyType.DYNAMIC,
+          };
+        const defaultStateForDropdownProperty: ExecutePropsResult<PropertyType.DROPDOWN> =
+          {
+            options: {
+              options: [],
+              disabled: true,
+              placeholder: t(
+                'An internal error occurred, please contact support',
+              ),
+            },
+            type: PropertyType.DROPDOWN,
+          };
+        return (
+          propertyType === PropertyType.DYNAMIC
+            ? defaultStateForDynamicProperty
+            : defaultStateForDropdownProperty
+        ) as ExecutePropsResult<T>;
+      });
   },
   mapToMetadata(
     type: 'action' | 'trigger',
@@ -94,12 +135,17 @@ export const piecesApi = {
     };
   },
   async getMetadata(step: Action | Trigger): Promise<StepMetadata> {
+    const customLogoUrl =
+      'customLogoUrl' in step ? step.customLogoUrl : undefined;
     switch (step.type) {
       case ActionType.ROUTER:
       case ActionType.LOOP_ON_ITEMS:
       case ActionType.CODE:
       case TriggerType.EMPTY:
-        return CORE_STEP_METADATA[step.type];
+        return {
+          ...CORE_STEP_METADATA[step.type],
+          ...spreadIfDefined('logoUrl', customLogoUrl),
+        };
       case ActionType.PIECE:
       case TriggerType.PIECE: {
         const { pieceName, pieceVersion } = step.settings;
@@ -107,10 +153,14 @@ export const piecesApi = {
           name: pieceName,
           version: pieceVersion,
         });
-        return piecesApi.mapToMetadata(
+        const metadata = await piecesApi.mapToMetadata(
           step.type === ActionType.PIECE ? 'action' : 'trigger',
           piece,
         );
+        return {
+          ...metadata,
+          ...spreadIfDefined('logoUrl', customLogoUrl),
+        };
       }
     }
   },

@@ -31,6 +31,8 @@ import { isNil } from '@activepieces/shared';
 
 type ConfigurePieceOAuth2DialogProps = {
   pieceName: string;
+  onConfigurationDone: () => void;
+  isEnabled: boolean;
 };
 
 const OAuth2FormValues = Type.Object({
@@ -46,7 +48,7 @@ type OAuth2FormValues = Static<typeof OAuth2FormValues>;
 export const ConfigurePieceOAuth2Dialog = forwardRef<
   HTMLButtonElement,
   ConfigurePieceOAuth2DialogProps
->(({ pieceName }, ref) => {
+>(({ pieceName, onConfigurationDone, isEnabled }, ref) => {
   const [open, setOpen] = useState(false);
   const form = useForm<OAuth2FormValues>({
     resolver: typeboxResolver(OAuth2FormValues),
@@ -85,6 +87,7 @@ export const ConfigurePieceOAuth2Dialog = forwardRef<
         description: t('OAuth2 Credentials Updated'),
         duration: 3000,
       });
+      onConfigurationDone();
       setOpen(false);
     },
     onError: (error) => {
@@ -111,11 +114,17 @@ export const ConfigurePieceOAuth2Dialog = forwardRef<
               size={'sm'}
               variant={'ghost'}
               loading={isUpserting || isDeleting}
+              disabled={!isEnabled}
               onClick={(e) => {
+                if (!isEnabled) {
+                  e.preventDefault();
+                  return;
+                }
                 if (isNil(oauth2App)) {
                   setOpen(true);
                 } else {
                   deleteOAuth2App(oauth2App.id);
+                  onConfigurationDone();
                 }
                 e.preventDefault();
                 e.stopPropagation();

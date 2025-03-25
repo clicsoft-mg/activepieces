@@ -23,6 +23,8 @@ type ConfirmationDeleteDialogProps = {
   mutationFn: () => Promise<void>;
   onError?: (error: Error) => void;
   isDanger?: boolean;
+  buttonText?: string;
+  showToast?: boolean;
 };
 
 export function ConfirmationDeleteDialog({
@@ -32,15 +34,19 @@ export function ConfirmationDeleteDialog({
   mutationFn,
   entityName,
   onError,
+  buttonText,
   isDanger = false,
+  showToast = true,
 }: ConfirmationDeleteDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { isPending, mutate } = useMutation({
     mutationFn,
     onSuccess: () => {
-      toast({
-        title: t('Removed {entityName}', { entityName }),
-      });
+      if (showToast) {
+        toast({
+          title: t('Removed {entityName}', { entityName }),
+        });
+      }
       setIsOpen(false);
     },
     onError,
@@ -63,7 +69,7 @@ export function ConfirmationDeleteDialog({
               setIsOpen(false);
             }}
           >
-            {t('Close')}
+            {t('Cancel')}
           </Button>
           <Button
             loading={isPending}
@@ -75,7 +81,7 @@ export function ConfirmationDeleteDialog({
             }}
           >
             {isDanger && <TriangleAlert className="size-4 mr-2" />}
-            {t('Remove')}
+            {buttonText || t('Remove')}
           </Button>
         </DialogFooter>
       </DialogContent>

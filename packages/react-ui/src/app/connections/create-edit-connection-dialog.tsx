@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form';
 import { useEffectOnce } from 'react-use';
 
 import { ApMarkdown } from '@/components/custom/markdown';
+import { AssignConnectionToProjectsControl } from '@/components/ui/assign-global-connection-to-projects';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -31,7 +32,6 @@ import { INTERNAL_ERROR_TOAST, toast } from '@/components/ui/use-toast';
 import { appConnectionsApi } from '@/features/connections/lib/app-connections-api';
 import { globalConnectionsApi } from '@/features/connections/lib/global-connections-api';
 import { api } from '@/lib/api';
-import { authenticationSession } from '@/lib/authentication-session';
 import {
   BasicAuthProperty,
   CustomAuthProperty,
@@ -51,54 +51,69 @@ import {
   UpsertAppConnectionRequestBody,
 } from '@activepieces/shared';
 
-import { BasicAuthConnectionSettings } from './basic-secret-connection-settings';
-import { CustomAuthConnectionSettings } from './custom-auth-connection-settings';
 import {
   newConnectionUtils,
   ConnectionNameAlreadyExists,
-} from './new-connection-utils';
+  isConnectionNameUnique,
+  NoProjectSelected,
+} from '../../features/connections/lib/utils';
+import { formUtils } from '../builder/piece-properties/form-utils';
+
+import { BasicAuthConnectionSettings } from './basic-secret-connection-settings';
+import { CustomAuthConnectionSettings } from './custom-auth-connection-settings';
 import { OAuth2ConnectionSettings } from './oauth2-connection-settings';
 import { SecretTextConnectionSettings } from './secret-text-connection-settings';
 
 type ConnectionDialogProps = {
   piece: PieceMetadataModelSummary | PieceMetadataModel;
   open: boolean;
-  onConnectionCreated: (
-    res: Pick<AppConnectionWithoutSensitiveData, 'id' | 'externalId'>,
+  setOpen: (
+    open: boolean,
+    connection?: Pick<AppConnectionWithoutSensitiveData, 'id' | 'externalId'>,
   ) => void;
-  setOpen: (open: boolean) => void;
   reconnectConnection: AppConnectionWithoutSensitiveData | null;
-  predefinedConnectionName: string | null;
   isGlobalConnection: boolean;
+  externalIdComingFromSdk?: string | null;
 };
 
-const CreateOrEditConnectionDialog = React.memo(
+const CreateOrEditConnectionDialogContent = React.memo(
   ({
     piece,
-    open,
-    setOpen,
-    onConnectionCreated,
     reconnectConnection,
-    predefinedConnectionName,
     isGlobalConnection,
-  }: ConnectionDialogProps) => {
+    externalIdComingFromSdk,
+    setOpen,
+  }: {
+    piece: PieceMetadataModelSummary | PieceMetadataModel;
+    reconnectConnection: AppConnectionWithoutSensitiveData | null;
+    isGlobalConnection: boolean;
+    externalIdComingFromSdk?: string | null;
+    setOpen: (
+      open: boolean,
+      connection?: Pick<AppConnectionWithoutSensitiveData, 'id' | 'externalId'>,
+    ) => void;
+  }) => {
     const { auth } = piece;
-
-    const formSchema = newConnectionUtils.buildConnectionSchema(piece);
+    const formSchema = formUtils.buildConnectionSchema(piece);
     const { externalId, displayName } = newConnectionUtils.getConnectionName(
       piece,
       reconnectConnection,
-      predefinedConnectionName,
+      externalIdComingFromSdk,
     );
     const form = useForm<{
-      request: UpsertAppConnectionRequestBody;
+      request: UpsertAppConnectionRequestBody & {
+        projectIds: string[];
+      };
     }>({
       defaultValues: {
-        request: newConnectionUtils.createDefaultValues(
-          piece,
-          externalId,
-          displayName,
-        ),
+        request: {
+          ...newConnectionUtils.createDefaultValues(
+            piece,
+            externalId,
+            displayName,
+          ),
+          projectIds: reconnectConnection?.projectIds ?? [],
+        },
       },
       mode: 'onChange',
       reValidateMode: 'onChange',
@@ -114,39 +129,31 @@ const CreateOrEditConnectionDialog = React.memo(
       mutationFn: async () => {
         setErrorMessage('');
         const formValues = form.getValues().request;
-
+        const isNameUnique = await isConnectionNameUnique(
+          isGlobalConnection,
+          formValues.displayName,
+        );
+        if (
+          !isNameUnique &&
+          reconnectConnection?.displayName !== formValues.displayName &&
+          (isNil(externalIdComingFromSdk) || externalIdComingFromSdk === '')
+        ) {
+          throw new ConnectionNameAlreadyExists();
+        }
         if (isGlobalConnection) {
-          const connections = await globalConnectionsApi.list({
-            limit: 10000,
-          });
-          const existingConnection = connections.data.find(
-            (connection) => connection.displayName === formValues.displayName,
-          );
-          if (!isNil(existingConnection) && isNil(reconnectConnection)) {
-            throw new ConnectionNameAlreadyExists();
+          if (formValues.projectIds.length === 0) {
+            throw new NoProjectSelected();
           }
           return globalConnectionsApi.upsert({
             ...formValues,
-            projectIds: [],
+            projectIds: formValues.projectIds,
             scope: AppConnectionScope.PLATFORM,
           });
-        }
-
-        const connections = await appConnectionsApi.list({
-          projectId: authenticationSession.getProjectId()!,
-          limit: 10000,
-        });
-        const existingConnection = connections.data.find(
-          (connection) => connection.displayName === formValues.displayName,
-        );
-        if (!isNil(existingConnection) && isNil(reconnectConnection)) {
-          throw new ConnectionNameAlreadyExists();
         }
         return appConnectionsApi.upsert(formValues);
       },
       onSuccess: (connection) => {
-        setOpen(false);
-        onConnectionCreated({
+        setOpen(false, {
           id: connection.id,
           externalId: connection.externalId,
         });
@@ -155,60 +162,71 @@ const CreateOrEditConnectionDialog = React.memo(
       onError: (err) => {
         if (err instanceof ConnectionNameAlreadyExists) {
           form.setError('request.displayName', {
-            message: t('Name is already used'),
+            message: err.message,
+          });
+        } else if (err instanceof NoProjectSelected) {
+          form.setError('request.projectIds', {
+            message: err.message,
           });
         } else if (api.isError(err)) {
           const apError = err.response?.data as ApErrorParams;
-          console.log(apError);
-          if (apError.code === ErrorCode.INVALID_CLOUD_CLAIM) {
-            setErrorMessage(
-              t(
-                'Could not claim the authorization code, make sure you have correct settings and try again.',
-              ),
-            );
-          } else if (apError.code === ErrorCode.INVALID_APP_CONNECTION) {
-            setErrorMessage(
-              t('Connection failed with error {msg}', {
-                msg: apError.params.error,
-              }),
-            );
+          switch (apError.code) {
+            case ErrorCode.INVALID_CLOUD_CLAIM: {
+              setErrorMessage(
+                t(
+                  'Could not claim the authorization code, make sure you have correct settings and try again.',
+                ),
+              );
+              break;
+            }
+            case ErrorCode.INVALID_APP_CONNECTION: {
+              setErrorMessage(
+                t('Connection failed with error {msg}', {
+                  msg: apError.params.error,
+                }),
+              );
+              break;
+            }
+            // can happen in embedding sdk connect method
+            case ErrorCode.PERMISSION_DENIED: {
+              setErrorMessage(
+                t(`You don't have the permission to create a connection.`),
+              );
+              break;
+            }
+            default: {
+              setErrorMessage('Unexpected error, please contact support');
+              toast(INTERNAL_ERROR_TOAST);
+              console.error(err);
+            }
           }
-        } else {
-          toast(INTERNAL_ERROR_TOAST);
-          console.error(err);
         }
       },
     });
     return (
-      <Dialog
-        open={open}
-        onOpenChange={(open) => setOpen(open)}
-        key={piece.name}
-      >
-        <DialogContent
-          onInteractOutside={(e) => e.preventDefault()}
-          className="max-h-[70vh]  min-w-[450px] max-w-[450px] lg:min-w-[650px] lg:max-w-[650px] overflow-y-auto"
-        >
-          <DialogHeader>
-            <DialogTitle>
-              {reconnectConnection
-                ? t('Reconnect {displayName} Connection', {
-                    displayName: reconnectConnection.displayName,
-                  })
-                : t('Create {displayName} Connection', {
-                    displayName: piece.displayName,
-                  })}
-            </DialogTitle>
-            <DialogDescription></DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="h-full">
-            <ApMarkdown markdown={auth?.description}></ApMarkdown>
-            {auth?.description && <Separator className="my-4" />}
-            <Form {...form}>
-              <form
-                onSubmit={() => console.log('submitted')}
-                className="flex flex-col gap-4"
-              >
+      <>
+        <DialogHeader>
+          <DialogTitle>
+            {reconnectConnection
+              ? t('Reconnect {displayName} Connection', {
+                  displayName: reconnectConnection.displayName,
+                })
+              : t('Connect to {displayName}', {
+                  displayName: piece.displayName,
+                })}
+          </DialogTitle>
+          <DialogDescription></DialogDescription>
+        </DialogHeader>
+        <ScrollArea className="h-full">
+          <ApMarkdown markdown={auth?.description}></ApMarkdown>
+          {auth?.description && <Separator className="my-4" />}
+          <Form {...form}>
+            <form
+              onSubmit={() => console.log('submitted')}
+              className="flex flex-col gap-4"
+            >
+              {(isNil(externalIdComingFromSdk) ||
+                externalIdComingFromSdk === '') && (
                 <FormField
                   name="request.displayName"
                   control={form.control}
@@ -230,52 +248,97 @@ const CreateOrEditConnectionDialog = React.memo(
                     </FormItem>
                   )}
                 ></FormField>
-                {auth?.type === PropertyType.SECRET_TEXT && (
-                  <SecretTextConnectionSettings
-                    authProperty={piece.auth as SecretTextProperty<boolean>}
-                  />
-                )}
-                {auth?.type === PropertyType.BASIC_AUTH && (
-                  <BasicAuthConnectionSettings
-                    authProperty={piece.auth as BasicAuthProperty}
-                  />
-                )}
-                {auth?.type === PropertyType.CUSTOM_AUTH && (
-                  <CustomAuthConnectionSettings
-                    authProperty={piece.auth as CustomAuthProperty<any>}
-                  />
-                )}
-                {auth?.type === PropertyType.OAUTH2 && (
+              )}
+
+              {isGlobalConnection && (
+                <AssignConnectionToProjectsControl
+                  control={form.control}
+                  name="request.projectIds"
+                />
+              )}
+              {auth?.type === PropertyType.SECRET_TEXT && (
+                <SecretTextConnectionSettings
+                  authProperty={piece.auth as SecretTextProperty<boolean>}
+                />
+              )}
+              {auth?.type === PropertyType.BASIC_AUTH && (
+                <BasicAuthConnectionSettings
+                  authProperty={piece.auth as BasicAuthProperty}
+                />
+              )}
+              {auth?.type === PropertyType.CUSTOM_AUTH && (
+                <CustomAuthConnectionSettings
+                  authProperty={piece.auth as CustomAuthProperty<any>}
+                />
+              )}
+
+              {auth?.type === PropertyType.OAUTH2 && (
+                <div className="mt-3.5">
                   <OAuth2ConnectionSettings
                     authProperty={piece.auth as OAuth2Property<OAuth2Props>}
                     piece={piece}
                     reconnectConnection={reconnectConnection}
                   />
-                )}
+                </div>
+              )}
 
-                <DialogFooter>
-                  <Button
-                    onClick={(e) => form.handleSubmit(() => mutate())(e)}
-                    className="w-full"
-                    loading={isPending}
-                    type="submit"
-                    disabled={!form.formState.isValid}
-                  >
-                    {t('Save')}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </ScrollArea>
+              <DialogFooter>
+                <Button
+                  onClick={(e) => form.handleSubmit(() => mutate())(e)}
+                  className="w-full"
+                  loading={isPending}
+                  type="submit"
+                  disabled={!form.formState.isValid}
+                >
+                  {t('Save')}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </ScrollArea>
 
-          {errorMessage && (
-            <FormError
-              formMessageId="create-connection-server-error-message"
-              className="text-left mt-4"
-            >
-              {errorMessage}
-            </FormError>
-          )}
+        {errorMessage && (
+          <FormError
+            formMessageId="create-connection-server-error-message"
+            className="text-left mt-4"
+          >
+            {errorMessage}
+          </FormError>
+        )}
+      </>
+    );
+  },
+);
+
+CreateOrEditConnectionDialogContent.displayName =
+  'CreateOrEditConnectionDialogContent';
+
+const CreateOrEditConnectionDialog = React.memo(
+  ({
+    piece,
+    open,
+    setOpen,
+    reconnectConnection,
+    isGlobalConnection,
+    externalIdComingFromSdk,
+  }: ConnectionDialogProps) => {
+    return (
+      <Dialog
+        open={open}
+        onOpenChange={(open) => setOpen(open)}
+        key={piece.name}
+      >
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          className="max-h-[70vh]  min-w-[450px] max-w-[450px] lg:min-w-[650px] lg:max-w-[650px] overflow-y-auto"
+        >
+          <CreateOrEditConnectionDialogContent
+            piece={piece}
+            setOpen={setOpen}
+            reconnectConnection={reconnectConnection}
+            isGlobalConnection={isGlobalConnection}
+            externalIdComingFromSdk={externalIdComingFromSdk}
+          />
         </DialogContent>
       </Dialog>
     );
@@ -283,4 +346,4 @@ const CreateOrEditConnectionDialog = React.memo(
 );
 
 CreateOrEditConnectionDialog.displayName = 'CreateOrEditConnectionDialog';
-export { CreateOrEditConnectionDialog };
+export { CreateOrEditConnectionDialog, CreateOrEditConnectionDialogContent };
